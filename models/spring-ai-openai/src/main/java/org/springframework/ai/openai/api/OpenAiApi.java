@@ -65,6 +65,13 @@ import org.springframework.web.reactive.function.client.WebClient;
  */
 public class OpenAiApi {
 
+	/**
+	 * Returns a builder pre-populated with the current configuration for mutation.
+	 */
+	public Builder mutate() {
+		return new Builder(this);
+	}
+
 	public static Builder builder() {
 		return new Builder();
 	}
@@ -75,106 +82,24 @@ public class OpenAiApi {
 
 	private static final Predicate<String> SSE_DONE_PREDICATE = "[DONE]"::equals;
 
+	// Store config fields for mutate/copy
+	private final String baseUrl;
+
+	private final ApiKey apiKey;
+
+	private final MultiValueMap<String, String> headers;
+
 	private final String completionsPath;
 
 	private final String embeddingsPath;
+
+	private final ResponseErrorHandler responseErrorHandler;
 
 	private final RestClient restClient;
 
 	private final WebClient webClient;
 
 	private OpenAiStreamFunctionCallingHelper chunkMerger = new OpenAiStreamFunctionCallingHelper();
-
-	/**
-	 * Create a new chat completion api with base URL set to https://api.openai.com
-	 * @param apiKey OpenAI apiKey.
-	 * @deprecated since 1.0.0.M6 - use {@link #builder()} instead
-	 */
-	@Deprecated(since = "1.0.0.M6")
-	public OpenAiApi(String apiKey) {
-		this(OpenAiApiConstants.DEFAULT_BASE_URL, apiKey);
-	}
-
-	/**
-	 * Create a new chat completion api.
-	 * @param baseUrl api base URL.
-	 * @param apiKey OpenAI apiKey.
-	 * @deprecated since 1.0.0.M6 - use {@link #builder()} instead
-	 */
-	@Deprecated(since = "1.0.0.M6")
-	public OpenAiApi(String baseUrl, String apiKey) {
-		this(baseUrl, apiKey, RestClient.builder(), WebClient.builder());
-	}
-
-	/**
-	 * Create a new chat completion api.
-	 * @param baseUrl api base URL.
-	 * @param apiKey OpenAI apiKey.
-	 * @param restClientBuilder RestClient builder.
-	 * @param webClientBuilder WebClient builder.
-	 * @deprecated since 1.0.0.M6 - use {@link #builder()} instead
-	 */
-	@Deprecated(since = "1.0.0.M6")
-	public OpenAiApi(String baseUrl, String apiKey, RestClient.Builder restClientBuilder,
-			WebClient.Builder webClientBuilder) {
-		this(baseUrl, apiKey, restClientBuilder, webClientBuilder, RetryUtils.DEFAULT_RESPONSE_ERROR_HANDLER);
-	}
-
-	/**
-	 * Create a new chat completion api.
-	 * @param baseUrl api base URL.
-	 * @param apiKey OpenAI apiKey.
-	 * @param restClientBuilder RestClient builder.
-	 * @param webClientBuilder WebClient builder.
-	 * @param responseErrorHandler Response error handler.
-	 * @deprecated since 1.0.0.M6 - use {@link #builder()} instead
-	 */
-	@Deprecated(since = "1.0.0.M6")
-	public OpenAiApi(String baseUrl, String apiKey, RestClient.Builder restClientBuilder,
-			WebClient.Builder webClientBuilder, ResponseErrorHandler responseErrorHandler) {
-		this(baseUrl, apiKey, "/v1/chat/completions", "/v1/embeddings", restClientBuilder, webClientBuilder,
-				responseErrorHandler);
-	}
-
-	/**
-	 * Create a new chat completion api.
-	 * @param baseUrl api base URL.
-	 * @param apiKey OpenAI apiKey.
-	 * @param completionsPath the path to the chat completions endpoint.
-	 * @param embeddingsPath the path to the embeddings endpoint.
-	 * @param restClientBuilder RestClient builder.
-	 * @param webClientBuilder WebClient builder.
-	 * @param responseErrorHandler Response error handler.
-	 * @deprecated since 1.0.0.M6 - use {@link #builder()} instead
-	 */
-	@Deprecated(since = "1.0.0.M6")
-	public OpenAiApi(String baseUrl, String apiKey, String completionsPath, String embeddingsPath,
-			RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder,
-			ResponseErrorHandler responseErrorHandler) {
-
-		this(baseUrl, apiKey, CollectionUtils.toMultiValueMap(Map.of()), completionsPath, embeddingsPath,
-				restClientBuilder, webClientBuilder, responseErrorHandler);
-	}
-
-	/**
-	 * Create a new chat completion api.
-	 * @param baseUrl api base URL.
-	 * @param apiKey OpenAI apiKey.
-	 * @param headers the http headers to use.
-	 * @param completionsPath the path to the chat completions endpoint.
-	 * @param embeddingsPath the path to the embeddings endpoint.
-	 * @param restClientBuilder RestClient builder.
-	 * @param webClientBuilder WebClient builder.
-	 * @param responseErrorHandler Response error handler.
-	 * @deprecated since 1.0.0.M6 - use {@link #builder()} instead
-	 */
-	@Deprecated(since = "1.0.0.M6")
-	public OpenAiApi(String baseUrl, String apiKey, MultiValueMap<String, String> headers, String completionsPath,
-			String embeddingsPath, RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder,
-			ResponseErrorHandler responseErrorHandler) {
-		this(baseUrl, new SimpleApiKey(apiKey), headers, completionsPath, embeddingsPath, restClientBuilder,
-				webClientBuilder, responseErrorHandler);
-	}
 
 	/**
 	 * Create a new chat completion api.
@@ -190,28 +115,33 @@ public class OpenAiApi {
 	public OpenAiApi(String baseUrl, ApiKey apiKey, MultiValueMap<String, String> headers, String completionsPath,
 			String embeddingsPath, RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder,
 			ResponseErrorHandler responseErrorHandler) {
+		this.baseUrl = baseUrl;
+		this.apiKey = apiKey;
+		this.headers = headers;
+		this.completionsPath = completionsPath;
+		this.embeddingsPath = embeddingsPath;
+		this.responseErrorHandler = responseErrorHandler;
 
 		Assert.hasText(completionsPath, "Completions Path must not be null");
 		Assert.hasText(embeddingsPath, "Embeddings Path must not be null");
 		Assert.notNull(headers, "Headers must not be null");
 
-		this.completionsPath = completionsPath;
-		this.embeddingsPath = embeddingsPath;
 		// @formatter:off
 		Consumer<HttpHeaders> finalHeaders = h -> {
-			if(!(apiKey instanceof NoopApiKey)) {
+			if (!(apiKey instanceof NoopApiKey)) {
 				h.setBearerAuth(apiKey.getValue());
 			}
 
 			h.setContentType(MediaType.APPLICATION_JSON);
 			h.addAll(headers);
 		};
-		this.restClient = restClientBuilder.baseUrl(baseUrl)
+		this.restClient = restClientBuilder.clone()
+			.baseUrl(baseUrl)
 			.defaultHeaders(finalHeaders)
 			.defaultStatusHandler(responseErrorHandler)
 			.build();
 
-		this.webClient = webClientBuilder
+		this.webClient = webClientBuilder.clone()
 			.baseUrl(baseUrl)
 			.defaultHeaders(finalHeaders)
 			.build(); // @formatter:on
@@ -366,6 +296,31 @@ public class OpenAiApi {
 			});
 	}
 
+	// Package-private getters for mutate/copy
+	String getBaseUrl() {
+		return this.baseUrl;
+	}
+
+	ApiKey getApiKey() {
+		return this.apiKey;
+	}
+
+	MultiValueMap<String, String> getHeaders() {
+		return this.headers;
+	}
+
+	String getCompletionsPath() {
+		return this.completionsPath;
+	}
+
+	String getEmbeddingsPath() {
+		return this.embeddingsPath;
+	}
+
+	ResponseErrorHandler getResponseErrorHandler() {
+		return this.responseErrorHandler;
+	}
+
 	/**
 	 * OpenAI Chat Completion Models.
 	 * <p>
@@ -379,101 +334,189 @@ public class OpenAiApi {
 	 * information about the model's context window, maximum output tokens, and knowledge
 	 * cutoff date.
 	 * <p>
-	 * <b>References:</b>
-	 * <ul>
-	 * <li><a href="https://platform.openai.com/docs/models#gpt-4o">GPT-4o</a></li>
-	 * <li><a href="https://platform.openai.com/docs/models#gpt-4-and-gpt-4-turbo">GPT-4
-	 * and GPT-4 Turbo</a></li>
-	 * <li><a href="https://platform.openai.com/docs/models#gpt-3-5-turbo">GPT-3.5
-	 * Turbo</a></li>
-	 * <li><a href="https://platform.openai.com/docs/models#o1-and-o1-mini">o1 and
-	 * o1-mini</a></li>
-	 * <li><a href="https://platform.openai.com/docs/models#o3-mini">o3-mini</a></li>
-	 * </ul>
+	 * <b>References:</b> <a href="https://platform.openai.com/docs/models">OpenAI Models
+	 * Documentation</a>
 	 */
 	public enum ChatModel implements ChatModelDescription {
 
+		// --- Reasoning Models ---
+
 		/**
-		 * <b>o1</b> is trained with reinforcement learning to perform complex reasoning.
-		 * It thinks before it answers, producing a long internal chain of thought before
-		 * responding to the user.
+		 * <b>o4-mini</b> is the latest small o-series model. It's optimized for fast,
+		 * effective reasoning with exceptionally efficient performance in coding and
+		 * visual tasks.
 		 * <p>
-		 * The latest o1 model supports both text and image inputs, and produces text
-		 * outputs (including Structured Outputs).
+		 * Context window: 200,000 tokens. Max output tokens: 100,000 tokens. Knowledge
+		 * cutoff: June 1, 2024.
 		 * <p>
-		 * The knowledge cutoff for o1 is October, 2023.
+		 * Model ID: o4-mini
 		 * <p>
+		 * See: <a href="https://platform.openai.com/docs/models/o4-mini">o4-mini</a>
+		 */
+		O4_MINI("o4-mini"),
+
+		/**
+		 * <b>o3</b> is a well-rounded and powerful model across domains. It sets a new
+		 * standard for math, science, coding, and visual reasoning tasks. It also excels
+		 * at technical writing and instruction-following. Use it to think through
+		 * multi-step problems that involve analysis across text, code, and images.
+		 * <p>
+		 * Context window: 200,000 tokens. Max output tokens: 100,000 tokens. Knowledge
+		 * cutoff: June 1, 2024.
+		 * <p>
+		 * Model ID: o3
+		 * <p>
+		 * See: <a href="https://platform.openai.com/docs/models/o3">o3</a>
+		 */
+		O3("o3"),
+
+		/**
+		 * <b>o3-mini</b> is a small reasoning model, providing high intelligence at cost
+		 * and latency targets similar to o1-mini. o3-mini supports key developer
+		 * features, like Structured Outputs, function calling, Batch API.
+		 * <p>
+		 * The knowledge cutoff for o3-mini models is October, 2023.
+		 * <p>
+		 * Context window: 200,000 tokens. Max output tokens: 100,000 tokens. Knowledge
+		 * cutoff: October 1, 2023.
+		 * <p>
+		 * Model ID: o3-mini
+		 * <p>
+		 * See: <a href="https://platform.openai.com/docs/models/o3-mini">o3-mini</a>
+		 */
+		O3_MINI("o3-mini"),
+
+		/**
+		 * The <b>o1</b> series of models are trained with reinforcement learning to
+		 * perform complex reasoning. o1 models think before they answer, producing a long
+		 * internal chain of thought before responding to the user.
+		 * <p>
+		 * Context window: 200,000 tokens. Max output tokens: 100,000 tokens. Knowledge
+		 * cutoff: October 1, 2023.
+		 * <p>
+		 * Model ID: o1
+		 * <p>
+		 * See: <a href="https://platform.openai.com/docs/models/o1">o1</a>
 		 */
 		O1("o1"),
-		/**
-		 * <b>o1-preview</b> is trained with reinforcement learning to perform complex
-		 * reasoning. It thinks before it answers, producing a long internal chain of
-		 * thought before responding to the user.
-		 * <p>
-		 * The latest o1-preview model supports both text and image inputs, and produces
-		 * text outputs (including Structured Outputs).
-		 * <p>
-		 * The knowledge cutoff for o1-preview is October, 2023.
-		 * <p>
-		 */
-		O1_PREVIEW("o1-preview"),
 
 		/**
 		 * <b>o1-mini</b> is a faster and more affordable reasoning model compared to o1.
 		 * o1-mini currently only supports text inputs and outputs.
 		 * <p>
-		 * The knowledge cutoff for o1-mini is October, 2023.
+		 * Context window: 128,000 tokens. Max output tokens: 65,536 tokens. Knowledge
+		 * cutoff: October 1, 2023.
 		 * <p>
+		 * Model ID: o1-mini
+		 * <p>
+		 * See: <a href="https://platform.openai.com/docs/models/o1-mini">o1-mini</a>
 		 */
 		O1_MINI("o1-mini"),
-		/**
-		 * <b>o3-mini</b> is our most recent small reasoning model, providing high
-		 * intelligence at the same cost and latency targets of o1-mini. o3-mini also
-		 * supports key developer features, like Structured Outputs, function calling,
-		 * Batch API, and more. Like other models in the o-series, it is designed to excel
-		 * at science, math, and coding tasks.
-		 * <p>
-		 * The knowledge cutoff for o3-mini models is October, 2023.
-		 * <p>
-		 */
-		O3_MINI("o3-mini"),
 
 		/**
-		 * <b>GPT-4o ("omni")</b> is our versatile, high-intelligence flagship model. It
-		 * accepts both text and image inputs and produces text outputs (including
-		 * Structured Outputs).
+		 * The <b>o1-pro</b> model, part of the o1 series trained with reinforcement
+		 * learning for complex reasoning, uses more compute to think harder and provide
+		 * consistently better answers.
 		 * <p>
-		 * The knowledge cutoff for GPT-4o models is October, 2023.
+		 * Note: o1-pro is available in the Responses API only to enable support for
+		 * multi-turn model interactions and other advanced API features.
 		 * <p>
+		 * Context window: 200,000 tokens. Max output tokens: 100,000 tokens. Knowledge
+		 * cutoff: October 1, 2023.
+		 * <p>
+		 * Model ID: o1-pro
+		 * <p>
+		 * See: <a href="https://platform.openai.com/docs/models/o1-pro">o1-pro</a>
+		 */
+		O1_PRO("o1-pro"),
+
+		// --- Flagship Models ---
+
+		/**
+		 * <b>GPT-4.1</b> is the flagship model for complex tasks. It is well suited for
+		 * problem solving across domains.
+		 * <p>
+		 * Context window: 1,047,576 tokens. Max output tokens: 32,768 tokens. Knowledge
+		 * cutoff: June 1, 2024.
+		 * <p>
+		 * Model ID: gpt-4.1
+		 * <p>
+		 * See: <a href="https://platform.openai.com/docs/models/gpt-4.1">gpt-4.1</a>
+		 */
+		GPT_4_1("gpt-4.1"),
+
+		/**
+		 * <b>GPT-4o</b> (“o” for “omni”) is the versatile, high-intelligence flagship
+		 * model. It accepts both text and image inputs, and produces text outputs
+		 * (including Structured Outputs). It is considered the best model for most tasks,
+		 * and the most capable model outside of the o-series models.
+		 * <p>
+		 * Context window: 128,000 tokens. Max output tokens: 16,384 tokens. Knowledge
+		 * cutoff: October 1, 2023.
+		 * <p>
+		 * Model ID: gpt-4o
+		 * <p>
+		 * See: <a href="https://platform.openai.com/docs/models/gpt-4o">gpt-4o</a>
 		 */
 		GPT_4_O("gpt-4o"),
+
 		/**
 		 * The <b>chatgpt-4o-latest</b> model ID continuously points to the version of
 		 * GPT-4o used in ChatGPT. It is updated frequently when there are significant
 		 * changes to ChatGPT's GPT-4o model.
 		 * <p>
 		 * Context window: 128,000 tokens. Max output tokens: 16,384 tokens. Knowledge
-		 * cutoff: October, 2023.
+		 * cutoff: October 1, 2023.
+		 * <p>
+		 * Model ID: chatgpt-4o-latest
+		 * <p>
+		 * See: <a href=
+		 * "https://platform.openai.com/docs/models/chatgpt-4o-latest">chatgpt-4o-latest</a>
 		 */
 		CHATGPT_4_O_LATEST("chatgpt-4o-latest"),
 
 		/**
-		 * <b>GPT-4o Audio</b> is a preview release model that accepts audio inputs and
-		 * outputs and can be used in the Chat Completions REST API.
+		 * <b>GPT-4o Audio Preview</b> represents a preview release of models that accept
+		 * audio inputs and outputs via the Chat Completions REST API.
 		 * <p>
-		 * The knowledge cutoff for GPT-4o Audio models is October, 2023.
+		 * Context window: 128,000 tokens. Max output tokens: 16,384 tokens. Knowledge
+		 * cutoff: October 1, 2023.
 		 * <p>
+		 * Model ID: gpt-4o-audio-preview
+		 * <p>
+		 * See: <a href=
+		 * "https://platform.openai.com/docs/models/gpt-4o-audio-preview">gpt-4o-audio-preview</a>
 		 */
 		GPT_4_O_AUDIO_PREVIEW("gpt-4o-audio-preview"),
 
+		// --- Cost-Optimized Models ---
+
 		/**
-		 * <b>GPT-4o-mini Audio</b> is a preview release model that accepts audio inputs
-		 * and outputs and can be used in the Chat Completions REST API.
+		 * <b>GPT-4.1-mini</b> provides a balance between intelligence, speed, and cost
+		 * that makes it an attractive model for many use cases.
 		 * <p>
-		 * The knowledge cutoff for GPT-4o-mini Audio models is October, 2023.
+		 * Context window: 1,047,576 tokens. Max output tokens: 32,768 tokens. Knowledge
+		 * cutoff: June 1, 2024.
 		 * <p>
+		 * Model ID: gpt-4.1-mini
+		 * <p>
+		 * See:
+		 * <a href="https://platform.openai.com/docs/models/gpt-4.1-mini">gpt-4.1-mini</a>
 		 */
-		GPT_4_O_MINI_AUDIO_PREVIEW("gpt-4o-mini-audio-preview"),
+		GPT_4_1_MINI("gpt-4.1-mini"),
+
+		/**
+		 * <b>GPT-4.1-nano</b> is the fastest, most cost-effective GPT-4.1 model.
+		 * <p>
+		 * Context window: 1,047,576 tokens. Max output tokens: 32,768 tokens. Knowledge
+		 * cutoff: June 1, 2024.
+		 * <p>
+		 * Model ID: gpt-4.1-nano
+		 * <p>
+		 * See:
+		 * <a href="https://platform.openai.com/docs/models/gpt-4.1-nano">gpt-4.1-nano</a>
+		 */
+		GPT_4_1_NANO("gpt-4.1-nano"),
 
 		/**
 		 * <b>GPT-4o-mini</b> is a fast, affordable small model for focused tasks. It
@@ -482,80 +525,106 @@ public class OpenAiApi {
 		 * larger model like GPT-4o can be distilled to GPT-4o-mini to produce similar
 		 * results at lower cost and latency.
 		 * <p>
-		 * The knowledge cutoff for GPT-4o-mini models is October, 2023.
+		 * Context window: 128,000 tokens. Max output tokens: 16,384 tokens. Knowledge
+		 * cutoff: October 1, 2023.
 		 * <p>
+		 * Model ID: gpt-4o-mini
+		 * <p>
+		 * See:
+		 * <a href="https://platform.openai.com/docs/models/gpt-4o-mini">gpt-4o-mini</a>
 		 */
 		GPT_4_O_MINI("gpt-4o-mini"),
 
 		/**
-		 * <b>GPT-4 Turbo</b> is a high-intelligence GPT model with vision capabilities,
-		 * usable in Chat Completions. Vision requests can now use JSON mode and function
-		 * calling.
+		 * <b>GPT-4o-mini Audio Preview</b> is a preview release model that accepts audio
+		 * inputs and outputs and can be used in the Chat Completions REST API.
 		 * <p>
-		 * The knowledge cutoff for the latest GPT-4 Turbo version is December, 2023.
+		 * Context window: 128,000 tokens. Max output tokens: 16,384 tokens. Knowledge
+		 * cutoff: October 1, 2023.
 		 * <p>
+		 * Model ID: gpt-4o-mini-audio-preview
+		 * <p>
+		 * See: <a href=
+		 * "https://platform.openai.com/docs/models/gpt-4o-mini-audio-preview">gpt-4o-mini-audio-preview</a>
+		 */
+		GPT_4_O_MINI_AUDIO_PREVIEW("gpt-4o-mini-audio-preview"),
+
+		// --- Realtime Models ---
+
+		/**
+		 * <b>GPT-4o Realtime</b> model, is capable of responding to audio and text inputs
+		 * in realtime over WebRTC or a WebSocket interface.
+		 * <p>
+		 * Context window: 128,000 tokens. Max output tokens: 4,096 tokens. Knowledge
+		 * cutoff: October 1, 2023.
+		 * <p>
+		 * Model ID: gpt-4o-realtime-preview
+		 * <p>
+		 * See: <a href=
+		 * "https://platform.openai.com/docs/models/gpt-4o-realtime-preview">gpt-4o-realtime-preview</a>
+		 */
+		GPT_4O_REALTIME_PREVIEW("gpt-4o-realtime-preview"),
+
+		/**
+		 * <b>GPT-4o-mini Realtime</b> model, is capable of responding to audio and text
+		 * inputs in realtime over WebRTC or a WebSocket interface.
+		 * <p>
+		 * Context window: 128,000 tokens. Max output tokens: 4,096 tokens. Knowledge
+		 * cutoff: October 1, 2023.
+		 * <p>
+		 * Model ID: gpt-4o-mini-realtime-preview
+		 * <p>
+		 * See: <a href=
+		 * "https://platform.openai.com/docs/models/gpt-4o-mini-realtime-preview">gpt-4o-mini-realtime-preview</a>
+		 */
+		GPT_4O_MINI_REALTIME_PREVIEW("gpt-4o-mini-realtime-preview\n"),
+
+		// --- Older GPT Models ---
+
+		/**
+		 * <b>GPT-4 Turbo</b> is the next generation of GPT-4, an older high-intelligence
+		 * GPT model. It was designed to be a cheaper, better version of GPT-4. Today, we
+		 * recommend using a newer model like GPT-4o.
+		 * <p>
+		 * Context window: 128,000 tokens. Max output tokens: 4,096 tokens. Knowledge
+		 * cutoff: Dec 01, 2023.
+		 * <p>
+		 * Model ID: gpt-4-turbo
+		 * <p>
+		 * See:
+		 * <a href="https://platform.openai.com/docs/models/gpt-4-turbo">gpt-4-turbo</a>
 		 */
 		GPT_4_TURBO("gpt-4-turbo"),
 
 		/**
-		 * <b>GPT-4-0125-preview</b> is the latest GPT-4 model intended to reduce cases of
-		 * “laziness” where the model doesn’t complete a task.
-		 * <p>
-		 * Context window: 128,000 tokens. Max output tokens: 4,096 tokens.
-		 */
-		GPT_4_0125_PREVIEW("gpt-4-0125-preview"),
-
-		/**
-		 * Currently points to {@link #GPT_4_0125_PREVIEW}.
-		 * <p>
-		 * Context window: 128,000 tokens. Max output tokens: 4,096 tokens.
-		 */
-		GPT_4_1106_PREVIEW("gpt-4-1106-preview"),
-
-		/**
-		 * <b>GPT-4 Turbo Preview</b> is a high-intelligence GPT model usable in Chat
-		 * Completions.
-		 * <p>
-		 * Currently points to {@link #GPT_4_0125_PREVIEW}.
-		 * <p>
-		 * Context window: 128,000 tokens. Max output tokens: 4,096 tokens.
-		 */
-		GPT_4_TURBO_PREVIEW("gpt-4-turbo-preview"),
-
-		/**
 		 * <b>GPT-4</b> is an older version of a high-intelligence GPT model, usable in
-		 * Chat Completions.
+		 * Chat Completions. Vision capabilities may not be available.
 		 * <p>
-		 * Currently points to {@link #GPT_4_0613}.
+		 * Context window: 128,000 tokens. Max output tokens: 4,096 tokens. Knowledge
+		 * cutoff: Dec 01, 2023.
 		 * <p>
-		 * Context window: 8,192 tokens. Max output tokens: 8,192 tokens.
+		 * Model ID: gpt-4
+		 * <p>
+		 * See: <a href="https://platform.openai.com/docs/models/gpt-4">gpt-4</a>
 		 */
 		GPT_4("gpt-4"),
-		/**
-		 * GPT-4 model snapshot.
-		 * <p>
-		 * Context window: 8,192 tokens. Max output tokens: 8,192 tokens.
-		 */
-		GPT_4_0613("gpt-4-0613"),
-		/**
-		 * GPT-4 model snapshot.
-		 * <p>
-		 * Context window: 8,192 tokens. Max output tokens: 8,192 tokens.
-		 */
-		GPT_4_0314("gpt-4-0314"),
 
 		/**
 		 * <b>GPT-3.5 Turbo</b> models can understand and generate natural language or
 		 * code and have been optimized for chat using the Chat Completions API but work
-		 * well for non-chat tasks as well.
+		 * well for non-chat tasks as well. Generally lower cost but less capable than
+		 * GPT-4 models.
 		 * <p>
-		 * As of July 2024, {@link #GPT_4_O_MINI} should be used in place of
-		 * gpt-3.5-turbo, as it is cheaper, more capable, multimodal, and just as fast.
-		 * gpt-3.5-turbo is still available for use in the API.
-		 * <p>
+		 * As of July 2024, GPT-4o mini is recommended over gpt-3.5-turbo for most use
+		 * cases.
 		 * <p>
 		 * Context window: 16,385 tokens. Max output tokens: 4,096 tokens. Knowledge
 		 * cutoff: September, 2021.
+		 * <p>
+		 * Model ID: gpt-3.5-turbo
+		 * <p>
+		 * See: <a href=
+		 * "https://platform.openai.com/docs/models/gpt-3.5-turbo">gpt-3.5-turbo</a>
 		 */
 		GPT_3_5_TURBO("gpt-3.5-turbo"),
 
@@ -566,7 +635,21 @@ public class OpenAiApi {
 		 * Context window: 4,096 tokens. Max output tokens: 4,096 tokens. Knowledge
 		 * cutoff: September, 2021.
 		 */
-		GPT_3_5_TURBO_INSTRUCT("gpt-3.5-turbo-instruct");
+		GPT_3_5_TURBO_INSTRUCT("gpt-3.5-turbo-instruct"),
+
+		/**
+		 * <b>GPT-4o Search Preview</b> is a specialized model for web search in Chat
+		 * Completions. It is trained to understand and execute web search queries. See
+		 * the web search guide for more information.
+		 */
+		GPT_4_O_SEARCH_PREVIEW("gpt-4o-search-preview"),
+
+		/**
+		 * <b>GPT-4o mini Search Preview</b> is a specialized model for web search in Chat
+		 * Completions. It is trained to understand and execute web search queries. See
+		 * the web search guide for more information.
+		 */
+		GPT_4_O_MINI_SEARCH_PREVIEW("gpt-4o-mini-search-preview");
 
 		public final String value;
 
@@ -844,7 +927,7 @@ public class OpenAiApi {
 	}
 
 	/**
-	 * Creates a model response for the given chat conversation.
+	 * Creates a model request for the given chat conversation.
 	 *
 	 * @param messages A list of messages comprising the conversation so far.
 	 * @param model ID of the model to use.
@@ -871,7 +954,8 @@ public class OpenAiApi {
 	 * @param maxTokens The maximum number of tokens that can be generated in the chat
 	 * completion. This value can be used to control costs for text generated via API.
 	 * This value is now deprecated in favor of max_completion_tokens, and is not
-	 * compatible with o1 series models.
+	 * compatible with o1 series models. The field is retained for use with other openai
+	 * models and openai compatible models.
 	 * @param maxCompletionTokens An upper bound for the number of tokens that can be
 	 * generated for a completion, including visible output tokens and reasoning tokens.
 	 * @param n How many chat completion choices to generate for each input message. Note
@@ -926,6 +1010,10 @@ public class OpenAiApi {
 	 * @param parallelToolCalls If set to true, the model will call all functions in the
 	 * tools list in parallel. Otherwise, the model will call the functions in the tools
 	 * list in the order they are provided.
+	 * @param reasoningEffort Constrains effort on reasoning for reasoning models.
+	 * Currently supported values are low, medium, and high. Reducing reasoning effort can
+	 * result in faster responses and fewer tokens used on reasoning in a response.
+	 * @param webSearchOptions Options for web search.
 	 */
 	@JsonInclude(Include.NON_NULL)
 	public record ChatCompletionRequest(// @formatter:off
@@ -937,8 +1025,8 @@ public class OpenAiApi {
 			@JsonProperty("logit_bias") Map<String, Integer> logitBias,
 			@JsonProperty("logprobs") Boolean logprobs,
 			@JsonProperty("top_logprobs") Integer topLogprobs,
-			@JsonProperty("max_tokens") @Deprecated Integer maxTokens, // Use maxCompletionTokens instead
-			@JsonProperty("max_completion_tokens") Integer maxCompletionTokens,
+			@JsonProperty("max_tokens") Integer maxTokens, // original field for specifying token usage.
+			@JsonProperty("max_completion_tokens") Integer maxCompletionTokens, // new field for gpt-o1 and other reasoning models
 			@JsonProperty("n") Integer n,
 			@JsonProperty("modalities") List<OutputModality> outputModalities,
 			@JsonProperty("audio") AudioParameters audioParameters,
@@ -955,7 +1043,8 @@ public class OpenAiApi {
 			@JsonProperty("tool_choice") Object toolChoice,
 			@JsonProperty("parallel_tool_calls") Boolean parallelToolCalls,
 			@JsonProperty("user") String user,
-			@JsonProperty("reasoning_effort") String reasoningEffort) {
+			@JsonProperty("reasoning_effort") String reasoningEffort,
+			@JsonProperty("web_search_options") WebSearchOptions webSearchOptions) {
 
 		/**
 		 * Shortcut constructor for a chat completion request with the given messages, model and temperature.
@@ -967,7 +1056,7 @@ public class OpenAiApi {
 		public ChatCompletionRequest(List<ChatCompletionMessage> messages, String model, Double temperature) {
 			this(messages, model, null, null, null, null, null, null, null, null, null, null, null, null, null,
 					null, null, null, false, null, temperature, null,
-					null, null, null, null, null);
+					null, null, null, null, null, null);
 		}
 
 		/**
@@ -981,7 +1070,7 @@ public class OpenAiApi {
 			this(messages, model, null, null, null, null, null, null,
 					null, null, null, List.of(OutputModality.AUDIO, OutputModality.TEXT), audio, null, null,
 					null, null, null, stream, null, null, null,
-					null, null, null, null, null);
+					null, null, null, null, null, null);
 		}
 
 		/**
@@ -996,7 +1085,7 @@ public class OpenAiApi {
 		public ChatCompletionRequest(List<ChatCompletionMessage> messages, String model, Double temperature, boolean stream) {
 			this(messages, model, null, null, null, null, null, null, null, null, null,
 					null, null, null, null, null, null, null, stream, null, temperature, null,
-					null, null, null, null, null);
+					null, null, null, null, null, null);
 		}
 
 		/**
@@ -1012,7 +1101,7 @@ public class OpenAiApi {
 				List<FunctionTool> tools, Object toolChoice) {
 			this(messages, model, null, null, null, null, null, null, null, null, null,
 					null, null, null, null, null, null, null, false, null, 0.8, null,
-					tools, toolChoice, null, null, null);
+					tools, toolChoice, null, null, null, null);
 		}
 
 		/**
@@ -1025,7 +1114,7 @@ public class OpenAiApi {
 		public ChatCompletionRequest(List<ChatCompletionMessage> messages, Boolean stream) {
 			this(messages, null, null, null, null, null, null, null, null, null, null,
 					null, null, null, null, null, null, null, stream, null, null, null,
-					null, null, null, null, null);
+					null, null, null, null, null, null);
 		}
 
 		/**
@@ -1038,7 +1127,7 @@ public class OpenAiApi {
 			return new ChatCompletionRequest(this.messages, this.model, this.store, this.metadata, this.frequencyPenalty, this.logitBias, this.logprobs,
 			this.topLogprobs, this.maxTokens, this.maxCompletionTokens, this.n, this.outputModalities, this.audioParameters, this.presencePenalty,
 			this.responseFormat, this.seed, this.serviceTier, this.stop, this.stream, streamOptions, this.temperature, this.topP,
-			this.tools, this.toolChoice, this.parallelToolCalls, this.user, this.reasoningEffort);
+			this.tools, this.toolChoice, this.parallelToolCalls, this.user, this.reasoningEffort, this.webSearchOptions);
 		}
 
 		/**
@@ -1120,6 +1209,61 @@ public class OpenAiApi {
 
 			public static StreamOptions INCLUDE_USAGE = new StreamOptions(true);
 		}
+
+		/**
+		 * This tool searches the web for relevant results to use in a response.
+		 *
+		 * @param searchContextSize
+		 * @param userLocation
+		 */
+		@JsonInclude(Include.NON_NULL)
+		public record WebSearchOptions(@JsonProperty("search_context_size") SearchContextSize searchContextSize,
+									@JsonProperty("user_location") UserLocation userLocation) {
+
+			/**
+			 * High level guidance for the amount of context window space to use for the
+			 * search. One of low, medium, or high. medium is the default.
+			 */
+			public enum SearchContextSize {
+
+				/**
+				 * Low context size.
+				 */
+				@JsonProperty("low")
+				LOW,
+
+				/**
+				 * Medium context size. This is the default.
+				 */
+				@JsonProperty("medium")
+				MEDIUM,
+
+				/**
+				 * High context size.
+				 */
+				@JsonProperty("high")
+				HIGH
+
+			}
+
+			/**
+			 * Approximate location parameters for the search.
+			 *
+			 * @param type The type of location approximation. Always "approximate".
+			 * @param approximate The approximate location details.
+			 */
+			@JsonInclude(Include.NON_NULL)
+			public record UserLocation(@JsonProperty("type") String type,
+									@JsonProperty("approximate") Approximate approximate) {
+
+				@JsonInclude(Include.NON_NULL)
+				public record Approximate(@JsonProperty("city") String city, @JsonProperty("country") String country,
+										@JsonProperty("region") String region, @JsonProperty("timezone") String timezone) {
+				}
+			}
+
+		}
+
 	} // @formatter:on
 
 	/**
@@ -1138,19 +1282,22 @@ public class OpenAiApi {
 	 * Applicable only for {@link Role#ASSISTANT} role and null otherwise.
 	 * @param refusal The refusal message by the assistant. Applicable only for
 	 * {@link Role#ASSISTANT} role and null otherwise.
-	 * @param audioOutput Audio response from the model. >>>>>>> bdb66e577 (OpenAI -
-	 * Support audio input modality)
+	 * @param audioOutput Audio response from the model.
+	 * @param annotations Annotations for the message, when applicable, as when using the
+	 * web search tool.
 	 */
 	@JsonInclude(Include.NON_NULL)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ChatCompletionMessage(// @formatter:off
 			@JsonProperty("content") Object rawContent,
 			@JsonProperty("role") Role role,
 			@JsonProperty("name") String name,
 			@JsonProperty("tool_call_id") String toolCallId,
-			@JsonProperty("tool_calls")
-			@JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY) List<ToolCall> toolCalls,
+			@JsonProperty("tool_calls") @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY) List<ToolCall> toolCalls,
 			@JsonProperty("refusal") String refusal,
-			@JsonProperty("audio") AudioOutput audioOutput) { // @formatter:on
+			@JsonProperty("audio") AudioOutput audioOutput,
+			@JsonProperty("annotations") List<Annotation> annotations
+	) { // @formatter:on
 
 		/**
 		 * Create a chat completion message with the given content and role. All other
@@ -1159,8 +1306,7 @@ public class OpenAiApi {
 		 * @param role The role of the author of this message.
 		 */
 		public ChatCompletionMessage(Object content, Role role) {
-			this(content, role, null, null, null, null, null);
-
+			this(content, role, null, null, null, null, null, null);
 		}
 
 		/**
@@ -1216,6 +1362,7 @@ public class OpenAiApi {
 		 * @param inputAudio Audio content part.
 		 */
 		@JsonInclude(Include.NON_NULL)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record MediaContent(// @formatter:off
 			@JsonProperty("type") String type,
 			@JsonProperty("text") String text,
@@ -1295,6 +1442,7 @@ public class OpenAiApi {
 		 * @param function The function definition.
 		 */
 		@JsonInclude(Include.NON_NULL)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record ToolCall(// @formatter:off
 				@JsonProperty("index") Integer index,
 				@JsonProperty("id") String id,
@@ -1315,6 +1463,7 @@ public class OpenAiApi {
 		 * function.
 		 */
 		@JsonInclude(Include.NON_NULL)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record ChatCompletionFunction(// @formatter:off
 				@JsonProperty("name") String name,
 				@JsonProperty("arguments") String arguments) { // @formatter:on
@@ -1330,12 +1479,36 @@ public class OpenAiApi {
 		 * @param transcript Transcript of the audio output from the model.
 		 */
 		@JsonInclude(Include.NON_NULL)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record AudioOutput(// @formatter:off
 				@JsonProperty("id") String id,
 				@JsonProperty("data") String data,
 				@JsonProperty("expires_at") Long expiresAt,
 				@JsonProperty("transcript") String transcript
 		) { // @formatter:on
+		}
+
+		/**
+		 * Represents an annotation within a message, specifically for URL citations.
+		 */
+		@JsonInclude(JsonInclude.Include.NON_NULL)
+		public record Annotation(@JsonProperty("type") String type,
+				@JsonProperty("url_citation") UrlCitation urlCitation) {
+			/**
+			 * A URL citation when using web search.
+			 *
+			 * @param endIndex The index of the last character of the URL citation in the
+			 * message.
+			 * @param startIndex The index of the first character of the URL citation in
+			 * the message.
+			 * @param title The title of the web resource.
+			 * @param url The URL of the web resource.
+			 */
+			@JsonInclude(JsonInclude.Include.NON_NULL)
+			public record UrlCitation(@JsonProperty("end_index") Integer endIndex,
+					@JsonProperty("start_index") Integer startIndex, @JsonProperty("title") String title,
+					@JsonProperty("url") String url) {
+			}
 		}
 	}
 
@@ -1358,6 +1531,7 @@ public class OpenAiApi {
 	 * @param usage Usage statistics for the completion request.
 	 */
 	@JsonInclude(Include.NON_NULL)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ChatCompletion(// @formatter:off
 			@JsonProperty("id") String id,
 			@JsonProperty("choices") List<Choice> choices,
@@ -1378,6 +1552,7 @@ public class OpenAiApi {
 		 * @param logprobs Log probability information for the choice.
 		 */
 		@JsonInclude(Include.NON_NULL)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record Choice(// @formatter:off
 				@JsonProperty("finish_reason") ChatCompletionFinishReason finishReason,
 				@JsonProperty("index") Integer index,
@@ -1394,6 +1569,7 @@ public class OpenAiApi {
 	 * @param refusal A list of message refusal tokens with log probability information.
 	 */
 	@JsonInclude(Include.NON_NULL)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record LogProbs(@JsonProperty("content") List<Content> content,
 			@JsonProperty("refusal") List<Content> refusal) {
 
@@ -1412,6 +1588,7 @@ public class OpenAiApi {
 		 * requested top_logprobs returned.
 		 */
 		@JsonInclude(Include.NON_NULL)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record Content(// @formatter:off
 				@JsonProperty("token") String token,
 				@JsonProperty("logprob") Float logprob,
@@ -1430,6 +1607,7 @@ public class OpenAiApi {
 			 * is no bytes representation for the token.
 			 */
 			@JsonInclude(Include.NON_NULL)
+			@JsonIgnoreProperties(ignoreUnknown = true)
 			public record TopLogProbs(// @formatter:off
 					@JsonProperty("token") String token,
 					@JsonProperty("logprob") Float logprob,
@@ -1452,14 +1630,6 @@ public class OpenAiApi {
 	 * completion).
 	 * @param promptTokensDetails Breakdown of tokens used in the prompt.
 	 * @param completionTokenDetails Breakdown of tokens used in a completion.
-	 * @param promptCacheHitTokens Number of tokens in the prompt that were served from
-	 * (util for
-	 * <a href="https://api-docs.deepseek.com/api/create-chat-completion">DeepSeek</a>
-	 * support).
-	 * @param promptCacheMissTokens Number of tokens in the prompt that were not served
-	 * (util for
-	 * <a href="https://api-docs.deepseek.com/api/create-chat-completion">DeepSeek</a>
-	 * support).
 	 */
 	@JsonInclude(Include.NON_NULL)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1468,12 +1638,11 @@ public class OpenAiApi {
 		@JsonProperty("prompt_tokens") Integer promptTokens,
 		@JsonProperty("total_tokens") Integer totalTokens,
 		@JsonProperty("prompt_tokens_details") PromptTokensDetails promptTokensDetails,
-		@JsonProperty("completion_tokens_details") CompletionTokenDetails completionTokenDetails,
-		@JsonProperty("prompt_cache_hit_tokens") Integer promptCacheHitTokens,
-		@JsonProperty("prompt_cache_miss_tokens") Integer promptCacheMissTokens) { // @formatter:on
+		@JsonProperty("completion_tokens_details") CompletionTokenDetails completionTokenDetails
+		) { // @formatter:on
 
 		public Usage(Integer completionTokens, Integer promptTokens, Integer totalTokens) {
-			this(completionTokens, promptTokens, totalTokens, null, null, null, null);
+			this(completionTokens, promptTokens, totalTokens, null, null);
 		}
 
 		/**
@@ -1483,6 +1652,7 @@ public class OpenAiApi {
 		 * @param cachedTokens Cached tokens present in the prompt.
 		 */
 		@JsonInclude(Include.NON_NULL)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record PromptTokensDetails(// @formatter:off
 			@JsonProperty("audio_tokens") Integer audioTokens,
 			@JsonProperty("cached_tokens") Integer cachedTokens) { // @formatter:on
@@ -1528,6 +1698,7 @@ public class OpenAiApi {
 	 * only if the StreamOptions.includeUsage is set to true.
 	 */
 	@JsonInclude(Include.NON_NULL)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record ChatCompletionChunk(// @formatter:off
 			@JsonProperty("id") String id,
 			@JsonProperty("choices") List<ChunkChoice> choices,
@@ -1547,6 +1718,7 @@ public class OpenAiApi {
 		 * @param logprobs Log probability information for the choice.
 		 */
 		@JsonInclude(Include.NON_NULL)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record ChunkChoice(// @formatter:off
 				@JsonProperty("finish_reason") ChatCompletionFinishReason finishReason,
 				@JsonProperty("index") Integer index,
@@ -1566,6 +1738,7 @@ public class OpenAiApi {
 	 * @param object The object type, which is always 'embedding'.
 	 */
 	@JsonInclude(Include.NON_NULL)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Embedding(// @formatter:off
 			@JsonProperty("index") Integer index,
 			@JsonProperty("embedding") float[] embedding,
@@ -1640,6 +1813,7 @@ public class OpenAiApi {
 	 * @param usage Usage statistics for the completion request.
 	 */
 	@JsonInclude(Include.NON_NULL)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record EmbeddingList<T>(// @formatter:off
 			@JsonProperty("object") String object,
 			@JsonProperty("data") List<T> data,
@@ -1648,6 +1822,21 @@ public class OpenAiApi {
 	}
 
 	public static class Builder {
+
+		public Builder() {
+		}
+
+		// Copy constructor for mutate()
+		public Builder(OpenAiApi api) {
+			this.baseUrl = api.getBaseUrl();
+			this.apiKey = api.getApiKey();
+			this.headers = new LinkedMultiValueMap<>(api.getHeaders());
+			this.completionsPath = api.getCompletionsPath();
+			this.embeddingsPath = api.getEmbeddingsPath();
+			this.restClientBuilder = api.restClient != null ? api.restClient.mutate() : RestClient.builder();
+			this.webClientBuilder = api.webClient != null ? api.webClient.mutate() : WebClient.builder();
+			this.responseErrorHandler = api.getResponseErrorHandler();
+		}
 
 		private String baseUrl = OpenAiApiConstants.DEFAULT_BASE_URL;
 

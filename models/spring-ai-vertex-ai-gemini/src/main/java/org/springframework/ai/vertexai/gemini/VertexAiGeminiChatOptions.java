@@ -17,6 +17,7 @@
 package org.springframework.ai.vertexai.gemini;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -29,7 +30,6 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import org.springframework.ai.model.function.FunctionCallback;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.vertexai.gemini.VertexAiGeminiChatModel.ChatModel;
@@ -44,6 +44,7 @@ import org.springframework.util.Assert;
  * @author Thomas Vitale
  * @author Grogdunn
  * @author Ilayaperumal Gopinathan
+ * @author Soby Chacko
  * @since 1.0.0
  */
 @JsonInclude(Include.NON_NULL)
@@ -96,11 +97,21 @@ public class VertexAiGeminiChatOptions implements ToolCallingChatOptions {
 	private @JsonProperty("responseMimeType") String responseMimeType;
 
 	/**
+	 * Optional. Frequency penalties.
+	 */
+	private @JsonProperty("frequencyPenalty") Double frequencyPenalty;
+
+	/**
+	 * Optional. Positive penalties.
+	 */
+	private @JsonProperty("presencePenalty") Double presencePenalty;
+
+	/**
 	 * Collection of {@link ToolCallback}s to be used for tool calling in the chat
 	 * completion requests.
 	 */
 	@JsonIgnore
-	private List<FunctionCallback> toolCallbacks = new ArrayList<>();
+	private List<ToolCallback> toolCallbacks = new ArrayList<>();
 
 	/**
      * Collection of tool names to be resolved at runtime and used for tool calling in the
@@ -138,6 +149,8 @@ public class VertexAiGeminiChatOptions implements ToolCallingChatOptions {
 		options.setTemperature(fromOptions.getTemperature());
 		options.setTopP(fromOptions.getTopP());
 		options.setTopK(fromOptions.getTopK());
+		options.setFrequencyPenalty(fromOptions.getFrequencyPenalty());
+		options.setPresencePenalty(fromOptions.getPresencePenalty());
 		options.setCandidateCount(fromOptions.getCandidateCount());
 		options.setMaxOutputTokens(fromOptions.getMaxOutputTokens());
 		options.setModel(fromOptions.getModel());
@@ -147,7 +160,7 @@ public class VertexAiGeminiChatOptions implements ToolCallingChatOptions {
 		options.setResponseMimeType(fromOptions.getResponseMimeType());
 		options.setGoogleSearchRetrieval(fromOptions.getGoogleSearchRetrieval());
 		options.setSafetySettings(fromOptions.getSafetySettings());
-		options.setInternalToolExecutionEnabled(fromOptions.isInternalToolExecutionEnabled());
+		options.setInternalToolExecutionEnabled(fromOptions.getInternalToolExecutionEnabled());
 		options.setToolContext(fromOptions.getToolContext());
 		return options;
 	}
@@ -233,42 +246,15 @@ public class VertexAiGeminiChatOptions implements ToolCallingChatOptions {
 	}
 
 	@Override
-	@JsonIgnore
-	@Deprecated
-	public List<FunctionCallback> getFunctionCallbacks() {
-		return this.getToolCallbacks();
-	}
-
-	@Override
-	@JsonIgnore
-	@Deprecated
-	public void setFunctionCallbacks(List<FunctionCallback> functionCallbacks) {
-		this.setToolCallbacks(functionCallbacks);
-	}
-
-	@Override
-	public List<FunctionCallback> getToolCallbacks() {
+	public List<ToolCallback> getToolCallbacks() {
 		return this.toolCallbacks;
 	}
 
 	@Override
-	public void setToolCallbacks(List<FunctionCallback> toolCallbacks) {
+	public void setToolCallbacks(List<ToolCallback> toolCallbacks) {
 		Assert.notNull(toolCallbacks, "toolCallbacks cannot be null");
 		Assert.noNullElements(toolCallbacks, "toolCallbacks cannot contain null elements");
 		this.toolCallbacks = toolCallbacks;
-	}
-
-	@Override
-	@JsonIgnore
-	@Deprecated
-	public Set<String> getFunctions() {
-		return this.getToolNames();
-	}
-
-	@JsonIgnore
-	@Deprecated
-	public void setFunctions(Set<String> functions) {
-		this.setToolNames(functions);
 	}
 
 	@Override
@@ -286,8 +272,8 @@ public class VertexAiGeminiChatOptions implements ToolCallingChatOptions {
 
 	@Override
 	@Nullable
-	public Boolean isInternalToolExecutionEnabled() {
-		return internalToolExecutionEnabled;
+	public Boolean getInternalToolExecutionEnabled() {
+		return this.internalToolExecutionEnabled;
 	}
 
 	@Override
@@ -296,15 +282,21 @@ public class VertexAiGeminiChatOptions implements ToolCallingChatOptions {
 	}
 
 	@Override
-	@JsonIgnore
 	public Double getFrequencyPenalty() {
-		return null;
+		return this.frequencyPenalty;
 	}
 
 	@Override
-	@JsonIgnore
 	public Double getPresencePenalty() {
-		return null;
+		return this.presencePenalty;
+	}
+
+	public void setFrequencyPenalty(Double frequencyPenalty) {
+		this.frequencyPenalty = frequencyPenalty;
+	}
+
+	public void setPresencePenalty(Double presencePenalty) {
+		this.presencePenalty = presencePenalty;
 	}
 
 	public Boolean getGoogleSearchRetrieval() {
@@ -322,19 +314,6 @@ public class VertexAiGeminiChatOptions implements ToolCallingChatOptions {
 	public void setSafetySettings(List<VertexAiGeminiSafetySetting> safetySettings) {
 		Assert.notNull(safetySettings, "safetySettings must not be null");
 		this.safetySettings = safetySettings;
-	}
-
-	@Deprecated
-	@Override
-	@JsonIgnore
-	public Boolean getProxyToolCalls() {
-		return this.internalToolExecutionEnabled != null ? !this.internalToolExecutionEnabled : null;
-	}
-
-	@Deprecated
-	@JsonIgnore
-	public void setProxyToolCalls(Boolean proxyToolCalls) {
-		this.internalToolExecutionEnabled = proxyToolCalls != null ? !proxyToolCalls : null;
 	}
 
 	@Override
@@ -359,6 +338,8 @@ public class VertexAiGeminiChatOptions implements ToolCallingChatOptions {
 				&& Objects.equals(this.stopSequences, that.stopSequences)
 				&& Objects.equals(this.temperature, that.temperature) && Objects.equals(this.topP, that.topP)
 				&& Objects.equals(this.topK, that.topK) && Objects.equals(this.candidateCount, that.candidateCount)
+				&& Objects.equals(this.frequencyPenalty, that.frequencyPenalty)
+				&& Objects.equals(this.presencePenalty, that.presencePenalty)
 				&& Objects.equals(this.maxOutputTokens, that.maxOutputTokens) && Objects.equals(this.model, that.model)
 				&& Objects.equals(this.responseMimeType, that.responseMimeType)
 				&& Objects.equals(this.toolCallbacks, that.toolCallbacks)
@@ -371,14 +352,16 @@ public class VertexAiGeminiChatOptions implements ToolCallingChatOptions {
 	@Override
 	public int hashCode() {
 		return Objects.hash(this.stopSequences, this.temperature, this.topP, this.topK, this.candidateCount,
-				this.maxOutputTokens, this.model, this.responseMimeType, this.toolCallbacks, this.toolNames,
-				this.googleSearchRetrieval, this.safetySettings, this.internalToolExecutionEnabled, this.toolContext);
+				this.frequencyPenalty, this.presencePenalty, this.maxOutputTokens, this.model, this.responseMimeType,
+				this.toolCallbacks, this.toolNames, this.googleSearchRetrieval, this.safetySettings,
+				this.internalToolExecutionEnabled, this.toolContext);
 	}
 
 	@Override
 	public String toString() {
 		return "VertexAiGeminiChatOptions{" + "stopSequences=" + this.stopSequences + ", temperature="
-				+ this.temperature + ", topP=" + this.topP + ", topK=" + this.topK + ", candidateCount="
+				+ this.temperature + ", topP=" + this.topP + ", topK=" + this.topK + ", frequencyPenalty="
+				+ this.frequencyPenalty + ", presencePenalty=" + this.presencePenalty + ", candidateCount="
 				+ this.candidateCount + ", maxOutputTokens=" + this.maxOutputTokens + ", model='" + this.model + '\''
 				+ ", responseMimeType='" + this.responseMimeType + '\'' + ", toolCallbacks=" + this.toolCallbacks
 				+ ", toolNames=" + this.toolNames + ", googleSearchRetrieval=" + this.googleSearchRetrieval
@@ -420,6 +403,16 @@ public class VertexAiGeminiChatOptions implements ToolCallingChatOptions {
 			return this;
 		}
 
+		public Builder frequencePenalty(Double frequencyPenalty) {
+			this.options.setFrequencyPenalty(frequencyPenalty);
+			return this;
+		}
+
+		public Builder presencePenalty(Double presencePenalty) {
+			this.options.setPresencePenalty(presencePenalty);
+			return this;
+		}
+
 		public Builder candidateCount(Integer candidateCount) {
 			this.options.setCandidateCount(candidateCount);
 			return this;
@@ -446,34 +439,25 @@ public class VertexAiGeminiChatOptions implements ToolCallingChatOptions {
 			return this;
 		}
 
-		@Deprecated
-		public Builder functionCallbacks(List<FunctionCallback> functionCallbacks) {
-			return toolCallbacks(functionCallbacks);
-		}
-
-		public Builder toolCallbacks(List<FunctionCallback> toolCallbacks) {
+		public Builder toolCallbacks(List<ToolCallback> toolCallbacks) {
 			this.options.toolCallbacks = toolCallbacks;
 			return this;
 		}
 
-		@Deprecated
-		public Builder functions(Set<String> functionNames) {
-			return this.toolNames(functionNames);
+		public Builder toolCallbacks(ToolCallback... toolCallbacks) {
+			Assert.notNull(toolCallbacks, "toolCallbacks cannot be null");
+			this.options.toolCallbacks.addAll(Arrays.asList(toolCallbacks));
+			return this;
 		}
 
 		public Builder toolNames(Set<String> toolNames) {
-			Assert.notNull(toolNames, "Function names must not be null");
+			Assert.notNull(toolNames, "Tool names must not be null");
 			this.options.toolNames = toolNames;
 			return this;
 		}
 
-		@Deprecated
-		public Builder function(String functionName) {
-			return this.toolName(functionName);
-		}
-
 		public Builder toolName(String toolName) {
-			Assert.hasText(toolName, "Function name must not be empty");
+			Assert.hasText(toolName, "Tool name must not be empty");
 			this.options.toolNames.add(toolName);
 			return this;
 		}
@@ -487,11 +471,6 @@ public class VertexAiGeminiChatOptions implements ToolCallingChatOptions {
 			Assert.notNull(safetySettings, "safetySettings must not be null");
 			this.options.safetySettings = safetySettings;
 			return this;
-		}
-
-		@Deprecated
-		public Builder proxyToolCalls(boolean proxyToolCalls) {
-			return this.internalToolExecutionEnabled(!proxyToolCalls);
 		}
 
 		public Builder internalToolExecutionEnabled(boolean internalToolExecutionEnabled) {

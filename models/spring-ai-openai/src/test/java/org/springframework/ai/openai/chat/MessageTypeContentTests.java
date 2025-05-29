@@ -17,7 +17,7 @@
 package org.springframework.ai.openai.chat;
 
 import java.net.MalformedURLException;
-import java.net.URL;
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
@@ -34,7 +34,7 @@ import reactor.core.publisher.Flux;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.model.Media;
+import org.springframework.ai.content.Media;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionChunk;
@@ -74,7 +74,7 @@ public class MessageTypeContentTests {
 
 	@BeforeEach
 	public void beforeEach() {
-		this.chatModel = new OpenAiChatModel(this.openAiApi);
+		this.chatModel = OpenAiChatModel.builder().openAiApi(this.openAiApi).build();
 	}
 
 	@Test
@@ -126,9 +126,11 @@ public class MessageTypeContentTests {
 		given(this.openAiApi.chatCompletionEntity(this.pomptCaptor.capture(), this.headersCaptor.capture()))
 			.willReturn(Mockito.mock(ResponseEntity.class));
 
-		URL mediaUrl = new URL("http://test");
-		this.chatModel.call(new Prompt(List.of(new UserMessage("test message",
-				List.of(Media.builder().mimeType(MimeTypeUtils.IMAGE_JPEG).data(mediaUrl).build())))));
+		URI mediaUri = URI.create("http://test");
+		this.chatModel.call(new Prompt(List.of(UserMessage.builder()
+			.text("test message")
+			.media(List.of(Media.builder().mimeType(MimeTypeUtils.IMAGE_JPEG).data(mediaUri).build()))
+			.build())));
 
 		validateComplexContent(this.pomptCaptor.getValue());
 	}
@@ -139,10 +141,11 @@ public class MessageTypeContentTests {
 		given(this.openAiApi.chatCompletionStream(this.pomptCaptor.capture(), this.headersCaptor.capture()))
 			.willReturn(this.fluxResponse);
 
-		URL mediaUrl = new URL("http://test");
-		this.chatModel.stream(new Prompt(List.of(new UserMessage("test message",
-				List.of(Media.builder().mimeType(MimeTypeUtils.IMAGE_JPEG).data(mediaUrl).build())))))
-			.subscribe();
+		URI mediaUrl = URI.create("http://test");
+		this.chatModel.stream(new Prompt(List.of(UserMessage.builder()
+			.text("test message")
+			.media(List.of(Media.builder().mimeType(MimeTypeUtils.IMAGE_JPEG).data(mediaUrl).build()))
+			.build()))).subscribe();
 
 		validateComplexContent(this.pomptCaptor.getValue());
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2023-2024 the original author or authors.
+ * Copyright 2023-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,8 +32,8 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.tool.method.MethodToolCallback;
+import org.springframework.ai.tool.support.ToolDefinitions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -67,8 +67,8 @@ class AnthropicChatClientMethodInvokingFunctionCallbackIT {
 
 		String response = ChatClient.create(this.chatModel).prompt()
 				.user("What's the weather like in San Francisco, Tokyo, and Paris?  Use Celsius.")
-				.tools(MethodToolCallback.builder()
-					.toolDefinition(ToolDefinition.builder(toolMethod).build())
+				.toolCallbacks(MethodToolCallback.builder()
+					.toolDefinition(ToolDefinitions.builder(toolMethod).build())
 					.toolMethod(toolMethod)
 					.build())
 				.call()
@@ -89,8 +89,8 @@ class AnthropicChatClientMethodInvokingFunctionCallbackIT {
 
 		String response = ChatClient.create(this.chatModel).prompt()
 				.user("What's the weather like in San Francisco, Tokyo, and Paris?  Use Celsius.")
-				.tools(MethodToolCallback.builder()
-					.toolDefinition(ToolDefinition.builder(toolMethod)
+				.toolCallbacks(MethodToolCallback.builder()
+					.toolDefinition(ToolDefinitions.builder(toolMethod)
 						.description("Get the weather in location")
 						.build())
 					.toolMethod(toolMethod)
@@ -116,8 +116,8 @@ class AnthropicChatClientMethodInvokingFunctionCallbackIT {
 
 		String response = ChatClient.create(this.chatModel).prompt()
 				.user("Turn light on in the living room.")
-				.tools(MethodToolCallback.builder()
-					.toolDefinition(ToolDefinition.builder(turnLightMethod)
+				.toolCallbacks(MethodToolCallback.builder()
+					.toolDefinition(ToolDefinitions.builder(turnLightMethod)
 						.description("Turn light on in the living room.")
 						.build())
 					.toolMethod(turnLightMethod)
@@ -144,8 +144,8 @@ class AnthropicChatClientMethodInvokingFunctionCallbackIT {
 
 		String response = ChatClient.create(this.chatModel).prompt()
 				.user("What's the weather like in San Francisco, Tokyo, and Paris?  Use Celsius.")
-				.tools(MethodToolCallback.builder()
-					.toolDefinition(ToolDefinition.builder(toolMethod)
+				.toolCallbacks(MethodToolCallback.builder()
+					.toolDefinition(ToolDefinitions.builder(toolMethod)
 						.description("Get the weather in location")
 						.build())
 					.toolMethod(toolMethod)
@@ -171,8 +171,8 @@ class AnthropicChatClientMethodInvokingFunctionCallbackIT {
 
 		String response = ChatClient.create(this.chatModel).prompt()
 				.user("What's the weather like in San Francisco, Tokyo, and Paris?  Use Celsius.")
-				.tools(MethodToolCallback.builder()
-					.toolDefinition(ToolDefinition.builder(toolMethod)
+				.toolCallbacks(MethodToolCallback.builder()
+					.toolDefinition(ToolDefinitions.builder(toolMethod)
 						.description("Get the weather in location")
 						.build())
 					.toolMethod(toolMethod)
@@ -202,8 +202,8 @@ class AnthropicChatClientMethodInvokingFunctionCallbackIT {
 
 		assertThatThrownBy(() -> ChatClient.create(this.chatModel).prompt()
 				.user("What's the weather like in San Francisco, Tokyo, and Paris?  Use Celsius.")
-				.tools(MethodToolCallback.builder()
-					.toolDefinition(ToolDefinition.builder(toolMethod)
+				.toolCallbacks(MethodToolCallback.builder()
+					.toolDefinition(ToolDefinitions.builder(toolMethod)
 						.description("Get the weather in location")
 						.build())
 					.toolMethod(toolMethod)
@@ -221,17 +221,17 @@ class AnthropicChatClientMethodInvokingFunctionCallbackIT {
 
 		TestFunctionClass targetObject = new TestFunctionClass();
 
-		// @formatter:off		
+		// @formatter:off
 		var toolMethod = ReflectionUtils.findMethod(
 			TestFunctionClass.class, "turnLivingRoomLightOn");
 
 		String response = ChatClient.create(this.chatModel).prompt()
 				.user("Turn light on in the living room.")
-				.tools(MethodToolCallback.builder()
+				.toolCallbacks(MethodToolCallback.builder()
 					.toolMethod(toolMethod)
-					.toolDefinition(ToolDefinition.builder(toolMethod)
+					.toolDefinition(ToolDefinitions.builder(toolMethod)
 						.description("Can turn lights on in the Living Room")
-						.build())					
+						.build())
 					.toolObject(targetObject)
 					.build())
 				.call()
@@ -248,7 +248,7 @@ class AnthropicChatClientMethodInvokingFunctionCallbackIT {
 
 		TestFunctionClass targetObject = new TestFunctionClass();
 
-		// @formatter:off		
+		// @formatter:off
 		String response = ChatClient.create(this.chatModel).prompt()
 				.user("Turn light red in the living room.")
 				.tools(targetObject)
@@ -335,7 +335,7 @@ class AnthropicChatClientMethodInvokingFunctionCallbackIT {
 		public void changeRoomLightColor(String roomName, LightColor color) {
 			arguments.put("roomName", roomName);
 			arguments.put("color", color);
-			logger.info("Change light colur in room: {} to color: {}", roomName, color);
+			logger.info("Change light color in room: {} to color: {}", roomName, color);
 		}
 
 	}

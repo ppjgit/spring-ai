@@ -30,7 +30,7 @@ import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.observation.DefaultChatModelObservationConvention;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.model.function.DefaultFunctionCallbackResolver;
+import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.observation.conventions.AiOperationType;
 import org.springframework.ai.observation.conventions.AiProvider;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -169,14 +169,13 @@ public class OpenAiChatModelObservationIT {
 
 		@Bean
 		public OpenAiApi openAiApi() {
-			return new OpenAiApi(System.getenv("OPENAI_API_KEY"));
+			return OpenAiApi.builder().apiKey(System.getenv("OPENAI_API_KEY")).build();
 		}
 
 		@Bean
 		public OpenAiChatModel openAiChatModel(OpenAiApi openAiApi, TestObservationRegistry observationRegistry) {
 			return new OpenAiChatModel(openAiApi, OpenAiChatOptions.builder().build(),
-					new DefaultFunctionCallbackResolver(), List.of(), RetryTemplate.defaultInstance(),
-					observationRegistry);
+					ToolCallingManager.builder().build(), RetryTemplate.defaultInstance(), observationRegistry);
 		}
 
 	}

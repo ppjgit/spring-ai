@@ -152,6 +152,7 @@ import org.springframework.util.StringUtils;
  * @author Soby Chacko
  * @author Sebastien Deleuze
  * @author Jihoon Kim
+ * @author YeongMin Song
  * @since 1.0.0
  */
 public class PgVectorStore extends AbstractObservationVectorStore implements InitializingBean {
@@ -319,12 +320,21 @@ public class PgVectorStore extends AbstractObservationVectorStore implements Ini
 
 	@Override
 	public void doDelete(List<String> idList) {
-		int updateCount = 0;
-		for (String id : idList) {
-			int count = this.jdbcTemplate.update("DELETE FROM " + getFullyQualifiedTableName() + " WHERE id = ?",
-					UUID.fromString(id));
-			updateCount = updateCount + count;
-		}
+		String sql = "DELETE FROM " + getFullyQualifiedTableName() + " WHERE id = ?";
+
+		this.jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
+
+			@Override
+			public void setValues(PreparedStatement ps, int i) throws SQLException {
+				var id = idList.get(i);
+				StatementCreatorUtils.setParameterValue(ps, 1, SqlTypeValue.TYPE_UNKNOWN, convertIdToPgType(id));
+			}
+
+			@Override
+			public int getBatchSize() {
+				return idList.size();
+			}
+		});
 	}
 
 	@Override
@@ -410,7 +420,10 @@ public class PgVectorStore extends AbstractObservationVectorStore implements Ini
 		// Enable the PGVector, JSONB and UUID support.
 		this.jdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS vector");
 		this.jdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS hstore");
-		this.jdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"");
+
+		if (this.idType == PgIdType.UUID) {
+			this.jdbcTemplate.execute("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"");
+		}
 
 		this.jdbcTemplate.execute(String.format("CREATE SCHEMA IF NOT EXISTS %s", this.getSchemaName()));
 
@@ -421,12 +434,12 @@ public class PgVectorStore extends AbstractObservationVectorStore implements Ini
 
 		this.jdbcTemplate.execute(String.format("""
 				CREATE TABLE IF NOT EXISTS %s (
-					id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+					id %s PRIMARY KEY,
 					content text,
 					metadata json,
 					embedding vector(%d)
 				)
-				""", this.getFullyQualifiedTableName(), this.embeddingDimensions()));
+				""", this.getFullyQualifiedTableName(), this.getColumnTypeName(), this.embeddingDimensions()));
 
 		if (this.createIndexMethod != PgIndexType.NONE) {
 			this.jdbcTemplate.execute(String.format("""
@@ -454,6 +467,16 @@ public class PgVectorStore extends AbstractObservationVectorStore implements Ini
 
 	private String getVectorIndexName() {
 		return this.vectorIndexName;
+	}
+
+	private String getColumnTypeName() {
+		return switch (getIdType()) {
+			case UUID -> "uuid DEFAULT uuid_generate_v4()";
+			case TEXT -> "text";
+			case INTEGER -> "integer";
+			case SERIAL -> "serial";
+			case BIGSERIAL -> "bigserial";
+		};
 	}
 
 	int embeddingDimensions() {

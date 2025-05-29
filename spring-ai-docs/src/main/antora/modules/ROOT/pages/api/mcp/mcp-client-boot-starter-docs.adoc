@@ -13,13 +13,19 @@ The MCP Client Boot Starter provides:
 
 == Starters
 
+[NOTE]
+====
+There has been a significant change in the Spring AI auto-configuration, starter modules' artifact names.
+Please refer to the https://docs.spring.io/spring-ai/reference/upgrade-notes.html[upgrade notes] for more information.
+====
+
 === Standard MCP Client
 
 [source,xml]
 ----
 <dependency>
     <groupId>org.springframework.ai</groupId>
-    <artifactId>spring-ai-mcp-client-spring-boot-starter</artifactId>
+    <artifactId>spring-ai-starter-mcp-client</artifactId>
 </dependency>
 ----
 
@@ -27,7 +33,7 @@ The standard starter connects simultaneously to one or more MCP servers over `ST
 The SSE connection uses the HttpClient-based transport implementation.
 Each connection to an MCP server creates a new MCP client instance.
 You can choose either `SYNC` or `ASYNC` MCP clients (note: you cannot mix sync and async clients).
-For production deployment, we recommend using the WebFlux-based SSE connection with the `spring-ai-mcp-client-webflux-spring-boot-starter`.
+For production deployment, we recommend using the WebFlux-based SSE connection with the `spring-ai-starter-mcp-client-webflux`.
 
 === WebFlux Client
 
@@ -37,7 +43,7 @@ The WebFlux starter provides similar functionality to the standard starter but u
 ----
 <dependency>
     <groupId>org.springframework.ai</groupId>
-    <artifactId>spring-ai-mcp-client-webflux-spring-boot-starter</artifactId>
+    <artifactId>spring-ai-starter-mcp-client-webflux</artifactId>
 </dependency>
 ----
 
@@ -77,6 +83,10 @@ The common properties are prefixed with `spring.ai.mcp.client`:
 
 |`root-change-notification`
 |Enable/disable root change notifications for all clients
+|`true`
+
+|`toolcallback.enabled`
+|Enable/disable the MCP tool callback integration with Spring AI's tool execution framework
 |`true`
 |===
 
@@ -166,15 +176,21 @@ Currently, the Claude Desktop format supports only STDIO connection types.
 
 Properties for Server-Sent Events (SSE) transport are prefixed with `spring.ai.mcp.client.sse`:
 
-[cols="2,4"]
+[cols="3,4,3"]
 |===
-|Property |Description
+|Property |Description | Default Value
 
 |`connections`
 |Map of named SSE connection configurations
+|-
 
 |`connections.[name].url`
-|URL endpoint for SSE communication with the MCP server
+|Base URL endpoint for SSE communication with the MCP server
+|-
+
+|`connections.[name].sse-endpoint`
+|the sse endpoint (as url suffix) to use for the connection
+|`/sse`
 |===
 
 Example configuration:
@@ -190,6 +206,7 @@ spring:
               url: http://localhost:8080
             server2:
               url: http://otherserver:8081
+              sse-endpoint: /custom-sse
 ----
 
 == Features
@@ -233,12 +250,12 @@ Sync::
 @Component
 public class CustomMcpSyncClientCustomizer implements McpSyncClientCustomizer {
     @Override
-    public void customize(String serverConfiurationName, McpClient.SyncSpec spec) {
+    public void customize(String serverConfigurationName, McpClient.SyncSpec spec) {
 
-        // Customize the request configuration
+        // Customize the request timeout configuration
         spec.requestTimeout(Duration.ofSeconds(30));
 
-        // Sets the root URIs that the server connecto this client can access. 
+        // Sets the root URIs that this client can access.
         spec.roots(roots);
 
         // Sets a custom sampling handler for processing message creation requests.
@@ -281,14 +298,14 @@ Async::
 @Component
 public class CustomMcpAsyncClientCustomizer implements McpAsyncClientCustomizer {
     @Override
-    public void customize(String serverConfiurationName, McpClient.AsyncSpec spec) {
+    public void customize(String serverConfigurationName, McpClient.AsyncSpec spec) {
         // Customize the async client configuration
         spec.requestTimeout(Duration.ofSeconds(30));
     }
 }
 ----
 ======
-The `serverConfiurationName` parameter is the name of the server configuration that the customizer is being applied to and the the MCP Client is created for.
+The `serverConfigurationName` parameter is the name of the server configuration that the customizer is being applied to and the MCP Client is created for.
 
 The MCP client auto-configuration automatically detects and applies any customizers found in the application context.
 
@@ -296,13 +313,13 @@ The MCP client auto-configuration automatically detects and applies any customiz
 
 The auto-configuration supports multiple transport types:
 
-* Standard I/O (Stdio) (activated by the `spring-ai-mcp-client-spring-boot-starter`)
-* SSE HTTP (activated by the `spring-ai-mcp-client-spring-boot-starter`)
+* Standard I/O (Stdio) (activated by the `spring-ai-starter-mcp-client`)
+* SSE HTTP (activated by the `spring-ai-starter-mcp-client`)
 * SSE WebFlux (activated by the `spring-ai-starter-mcp-client-webflux`)
 
 === Integration with Spring AI
 
-The starter automatically configures tool callbacks that integrate with Spring AI's tool execution framework, allowing MCP tools to be used as part of AI interactions.
+The starter can configure tool callbacks that integrate with Spring AI's tool execution framework, allowing MCP tools to be used as part of AI interactions. This integration is enabled by default and can be disabled by setting the `spring.ai.mcp.client.toolcallback.enabled=false` property.
 
 == Usage Example
 
@@ -351,8 +368,7 @@ private List<McpSyncClient> mcpSyncClients;  // For sync client
 private List<McpAsyncClient> mcpAsyncClients;  // For async client
 ----
 
-Additionally, the registered MCP Tools with all MCP clients are provided as a list of ToolCallback 
-through a ToolCallbackProvider instance:
+When tool callbacks are enabled (the default behavior), the registered MCP Tools with all MCP clients are provided as a `ToolCallbackProvider` instance:
 
 [source,java]
 ----
@@ -363,9 +379,9 @@ ToolCallback[] toolCallbacks = toolCallbackProvider.getToolCallbacks();
 
 == Example Applications
 
-- link:https://github.com/spring-projects/spring-ai-examples/tree/main/model-context-protocol/web-search/brave-chatbot[Brave Wet Search Chatbot] - A chatbot that uses the Model Context Protocol to interact with a web search server.
-- link:https://github.com/spring-projects/spring-ai-examples/tree/main/model-context-protocol/client-starter/starter-default-client[Default MCP Client Starter] - A simple example of using the the default `spring-ai-mcp-client-spring-boot-starter` MCP Client Boot Starter.
-- link:https://github.com/spring-projects/spring-ai-examples/tree/main/model-context-protocol/client-starter/starter-webflux-client[WebFlux MCP Client Starter] - A simple example of using the `spring-ai-mcp-client-webflux-spring-boot-starter` the MCP Client Boot Starter.
+- link:https://github.com/spring-projects/spring-ai-examples/tree/main/model-context-protocol/web-search/brave-chatbot[Brave Web Search Chatbot] - A chatbot that uses the Model Context Protocol to interact with a web search server.
+- link:https://github.com/spring-projects/spring-ai-examples/tree/main/model-context-protocol/client-starter/starter-default-client[Default MCP Client Starter] - A simple example of using the default `spring-ai-starter-mcp-client` MCP Client Boot Starter.
+- link:https://github.com/spring-projects/spring-ai-examples/tree/main/model-context-protocol/client-starter/starter-webflux-client[WebFlux MCP Client Starter] - A simple example of using the `spring-ai-starter-mcp-client-webflux` MCP Client Boot Starter.
 
 == Additional Resources
 

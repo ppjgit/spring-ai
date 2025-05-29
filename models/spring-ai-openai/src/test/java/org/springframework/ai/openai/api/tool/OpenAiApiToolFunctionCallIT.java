@@ -44,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Christian Tzolov
  * @author Thomas Vitale
+ * @author Alexandros Pappas
  */
 @EnabledIfEnvironmentVariable(named = "OPENAI_API_KEY", matches = ".+")
 public class OpenAiApiToolFunctionCallIT {
@@ -52,7 +53,7 @@ public class OpenAiApiToolFunctionCallIT {
 
 	MockWeatherService weatherService = new MockWeatherService();
 
-	OpenAiApi completionApi = new OpenAiApi(System.getenv("OPENAI_API_KEY"));
+	OpenAiApi completionApi = OpenAiApi.builder().apiKey(System.getenv("OPENAI_API_KEY")).build();
 
 	private static <T> T fromJson(String json, Class<T> targetClass) {
 		try {
@@ -129,7 +130,7 @@ public class OpenAiApiToolFunctionCallIT {
 
 				// extend conversation with function response.
 				messages.add(new ChatCompletionMessage("" + weatherResponse.temp() + weatherRequest.unit(), Role.TOOL,
-						functionName, toolCall.id(), null, null, null));
+						functionName, toolCall.id(), null, null, null, null));
 			}
 		}
 

@@ -16,16 +16,23 @@
 
 package org.springframework.ai.mcp;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.Map;
 
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.model.ModelOptionsUtils;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.definition.DefaultToolDefinition;
 import org.springframework.ai.tool.definition.ToolDefinition;
+import org.springframework.ai.tool.execution.ToolExecutionException;
+import org.springframework.core.log.LogAccessor;
 
 /**
  * Implementation of {@link ToolCallback} that adapts MCP tools to Spring AI's tool
@@ -40,7 +47,9 @@ import org.springframework.ai.tool.definition.ToolDefinition;
  * <li>Manages JSON serialization/deserialization of tool inputs and outputs</li>
  * </ul>
  * <p>
- * Example usage: <pre>{@code
+ * Example usage:
+ *
+ * <pre>{@code
  * McpSyncClient mcpClient = // obtain MCP client
  * Tool mcpTool = // obtain MCP tool definition
  * ToolCallback callback = new McpToolCallback(mcpClient, mcpTool);
@@ -57,6 +66,8 @@ import org.springframework.ai.tool.definition.ToolDefinition;
  */
 public class SyncMcpToolCallback implements ToolCallback {
 
+	private static final Logger logger = LoggerFactory.getLogger(SyncMcpToolCallback.class);
+
 	private final McpSyncClient mcpClient;
 
 	private final Tool tool;
@@ -69,6 +80,7 @@ public class SyncMcpToolCallback implements ToolCallback {
 	public SyncMcpToolCallback(McpSyncClient mcpClient, Tool tool) {
 		this.mcpClient = mcpClient;
 		this.tool = tool;
+
 	}
 
 	/**
@@ -84,8 +96,8 @@ public class SyncMcpToolCallback implements ToolCallback {
 	 */
 	@Override
 	public ToolDefinition getToolDefinition() {
-		return ToolDefinition.builder()
-			.name(this.tool.name())
+		return DefaultToolDefinition.builder()
+			.name(McpToolUtils.prefixedToolName(this.mcpClient.getClientInfo().name(), this.tool.name()))
 			.description(this.tool.description())
 			.inputSchema(ModelOptionsUtils.toJsonString(this.tool.inputSchema()))
 			.build();
@@ -106,9 +118,28 @@ public class SyncMcpToolCallback implements ToolCallback {
 	@Override
 	public String call(String functionInput) {
 		Map<String, Object> arguments = ModelOptionsUtils.jsonToMap(functionInput);
-		CallToolResult response = this.mcpClient
-			.callTool(new CallToolRequest(this.getToolDefinition().name(), arguments));
-		return ModelOptionsUtils.toJsonString(response.content());
+		// Note that we use the original tool name here, not the adapted one from
+		// getToolDefinition
+		try {
+			CallToolResult response = this.mcpClient.callTool(new CallToolRequest(this.tool.name(), arguments));
+			if (response.isError() != null && response.isError()) {
+				logger.error("Error calling tool: {}", response.content());
+				throw new ToolExecutionException(this.getToolDefinition(),
+						new IllegalStateException("Error calling tool: " + response.content()));
+			}
+			return ModelOptionsUtils.toJsonString(response.content());
+		}
+		catch (Exception ex) {
+			logger.error("Exception while tool calling: ", ex);
+			throw new ToolExecutionException(this.getToolDefinition(), ex.getCause());
+		}
+
+	}
+
+	@Override
+	public String call(String toolArguments, ToolContext toolContext) {
+		// ToolContext is not supported by the MCP tools
+		return this.call(toolArguments);
 	}
 
 }

@@ -10,25 +10,59 @@ Spring AI provides dedicated xref:api/chat/bedrock-converse.adoc[Amazon Bedrock 
 
 == Prerequisites
 
-You will need to create an API key on Anthropic portal.
-Create an account at https://console.anthropic.com/dashboard[Anthropic API dashboard] and generate the api key on the https://console.anthropic.com/settings/keys[Get API Keys] page.
-The Spring AI project defines a configuration property named `spring.ai.anthropic.api-key` that you should set to the value of the `API Key` obtained from anthropic.com.
-Exporting an environment variable is one way to set that configuration property:
+You will need to create an API key on the Anthropic portal.
 
-[source,shell]
+Create an account at https://console.anthropic.com/dashboard[Anthropic API dashboard] and generate the API key on the https://console.anthropic.com/settings/keys[Get API Keys] page.
+
+The Spring AI project defines a configuration property named `spring.ai.anthropic.api-key` that you should set to the value of the `API Key` obtained from anthropic.com.
+
+You can set this configuration property in your `application.properties` file:
+
+[source,properties]
 ----
-export SPRING_AI_ANTHROPIC_API_KEY=<INSERT KEY HERE>
+spring.ai.anthropic.api-key=<your-anthropic-api-key>
+----
+
+For enhanced security when handling sensitive information like API keys, you can use Spring Expression Language (SpEL) to reference a custom environment variable:
+
+[source,yaml]
+----
+# In application.yml
+spring:
+  ai:
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY}
+----
+
+[source,bash]
+----
+# In your environment or .env file
+export ANTHROPIC_API_KEY=<your-anthropic-api-key>
+----
+
+You can also set this configuration programmatically in your application code:
+
+[source,java]
+----
+// Retrieve API key from a secure source or environment variable
+String apiKey = System.getenv("ANTHROPIC_API_KEY");
 ----
 
 === Add Repositories and BOM
 
 Spring AI artifacts are published in Maven Central and Spring Snapshot repositories.
-Refer to the xref:getting-started.adoc#repositories[Repositories] section to add these repositories to your build system.
+Refer to the xref:getting-started.adoc#artifact-repositories[Artifact Repositories] section to add these repositories to your build system.
 
 To help with dependency management, Spring AI provides a BOM (bill of materials) to ensure that a consistent version of Spring AI is used throughout the entire project. Refer to the xref:getting-started.adoc#dependency-management[Dependency Management] section to add the Spring AI BOM to your build system.
 
 
 == Auto-configuration
+
+[NOTE]
+====
+There has been a significant change in the Spring AI auto-configuration, starter modules' artifact names.
+Please refer to the https://docs.spring.io/spring-ai/reference/upgrade-notes.html[upgrade notes] for more information.
+====
 
 Spring AI provides Spring Boot auto-configuration for the Anthropic Chat Client.
 To enable it add the following dependency to your project's Maven `pom.xml` or Gradle `build.gradle` file:
@@ -41,7 +75,7 @@ Maven::
 ----
 <dependency>
     <groupId>org.springframework.ai</groupId>
-    <artifactId>spring-ai-anthropic-spring-boot-starter</artifactId>
+    <artifactId>spring-ai-starter-model-anthropic</artifactId>
 </dependency>
 ----
 
@@ -50,7 +84,7 @@ Gradle::
 [source,groovy]
 ----
 dependencies {
-    implementation 'org.springframework.ai:spring-ai-anthropic-spring-boot-starter'
+    implementation 'org.springframework.ai:spring-ai-starter-model-anthropic'
 }
 ----
 ======
@@ -87,6 +121,7 @@ The prefix `spring.ai.anthropic` is used as the property prefix that lets you co
 | Property | Description | Default
 
 | spring.ai.anthropic.base-url   | The URL to connect to |  https://api.anthropic.com
+| spring.ai.anthropic.completions-path   | The path to append to the base URL. |  `/v1/chat/completions`
 | spring.ai.anthropic.version   | Anthropic API version |  2023-06-01
 | spring.ai.anthropic.api-key    | The API Key           |  -
 | spring.ai.anthropic.beta-version | Enables new/experimental features. If set to `max-tokens-3-5-sonnet-2024-07-15` 
@@ -95,14 +130,26 @@ the output tokens limit is increased from `4096` to `8192` tokens (for claude-3-
 
 ==== Configuration Properties
 
+[NOTE]
+====
+Enabling and disabling of the chat auto-configurations are now configured via top level properties with the prefix `spring.ai.model.chat`.
+
+To enable, spring.ai.model.chat=anthropic (It is enabled by default)
+
+To disable, spring.ai.model.chat=none (or any value which doesn't match anthropic)
+
+This change is done to allow configuration of multiple models.
+====
+
 The prefix `spring.ai.anthropic.chat` is the property prefix that lets you configure the chat model implementation for Anthropic.
 
 [cols="3,5,1", stripes=even]
 |====
 | Property | Description | Default
 
-| spring.ai.anthropic.chat.enabled | Enable Anthropic chat model.  | true
-| spring.ai.anthropic.chat.options.model | This is the Anthropic Chat model to use. Supports: `claude-3-7-sonnet-latest`, `claude-3-5-sonnet-latest`, `claude-3-opus-20240229`, `claude-3-sonnet-20240229`, `claude-3-haiku-20240307` and the legacy `claude-2.1`, `claude-2.0` and `claude-instant-1.2` models. | `claude-3-7-sonnet-latest`
+| spring.ai.anthropic.chat.enabled (Removed and no longer valid) | Enable Anthropic chat model.  | true
+| spring.ai.model.chat | Enable Anthropic chat model.  | anthropic
+| spring.ai.anthropic.chat.options.model | This is the Anthropic Chat model to use. Supports: `claude-3-7-sonnet-latest`, `claude-3-5-sonnet-latest`, `claude-3-opus-20240229`, `claude-3-sonnet-20240229`, `claude-3-haiku-20240307` | `claude-3-7-sonnet-latest`
 | spring.ai.anthropic.chat.options.temperature | The sampling temperature to use that controls the apparent creativity of generated completions. Higher values will make output more random while lower values will make results more focused and deterministic. It is not recommended to modify temperature and top_p for the same completions request as the interaction of these two settings is difficult to predict. | 0.8
 | spring.ai.anthropic.chat.options.max-tokens | The maximum number of tokens to generate in the chat completion. The total length of input tokens and generated tokens is limited by the model's context length. | 500
 | spring.ai.anthropic.chat.options.stop-sequence | Custom text sequences that will cause the model to stop generating. Our models will normally stop when they have naturally completed their turn, which will result in a response stop_reason of "end_turn". If you want the model to stop generating when it encounters custom strings of text, you can use the stop_sequences parameter. If the model encounters one of the custom sequences, the response stop_reason value will be "stop_sequence" and the response stop_sequence value will contain the matched stop sequence. | -
@@ -134,19 +181,19 @@ ChatResponse response = chatModel.call(
     new Prompt(
         "Generate the names of 5 famous pirates.",
         AnthropicChatOptions.builder()
-            .model("claude-2.1")
+            .model("claude-3-7-sonnet-latest")
             .temperature(0.4)
         .build()
     ));
 ----
 
-TIP: In addition to the model specific https://github.com/spring-projects/spring-ai/blob/main/models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java[AnthropicChatOptions] you can use a portable https://github.com/spring-projects/spring-ai/blob/main/spring-ai-core/src/main/java/org/springframework/ai/chat/prompt/ChatOptions.java[ChatOptions] instance, created with the https://github.com/spring-projects/spring-ai/blob/main/spring-ai-core/src/main/java/org/springframework/ai/chat/prompt/ChatOptionsBuilder.java[ChatOptionsBuilder#builder()].
+TIP: In addition to the model specific https://github.com/spring-projects/spring-ai/blob/main/models/spring-ai-anthropic/src/main/java/org/springframework/ai/anthropic/AnthropicChatOptions.java[AnthropicChatOptions] you can use a portable https://github.com/spring-projects/spring-ai/blob/main/spring-ai-client-chat/src/main/java/org/springframework/ai/chat/prompt/ChatOptions.java[ChatOptions] instance, created with the https://github.com/spring-projects/spring-ai/blob/main/spring-ai-client-chat/src/main/java/org/springframework/ai/chat/prompt/ChatOptionsBuilder.java[ChatOptionsBuilder#builder()].
 
 == Tool/Function Calling
 
 You can register custom Java Tools with the `AnthropicChatModel` and have the Anthropic Claude model intelligently choose to output a JSON object containing arguments to call one or many of the registered functions.
 This is a powerful technique to connect the LLM capabilities with external tools and APIs.
-Read more about xref:api/chat/functions/anthropic-chat-functions.adoc[Anthropic Function Calling].
+Read more about xref:api/tools.adoc[Tool Calling].
 
 == Multimodal
 
@@ -164,7 +211,7 @@ Below is a simple code example extracted from https://github.com/spring-projects
 
 [source,java]
 ----
-byte[] imageData = new ClassPathResource("/multimodal.test.png").getContentAsByteArray();
+var imageData = new ClassPathResource("/multimodal.test.png");
 
 var userMessage = new UserMessage("Explain what do you see on this picture?",
         List.of(new Media(MimeTypeUtils.IMAGE_PNG, this.imageData)));
@@ -203,7 +250,7 @@ var response = this.chatModel.call(new Prompt(List.of(userMessage)));
 
 == Sample Controller
 
-https://start.spring.io/[Create] a new Spring Boot project and add the `spring-ai-anthropic-spring-boot-starter` to your pom (or gradle) dependencies.
+https://start.spring.io/[Create] a new Spring Boot project and add the `spring-ai-starter-model-anthropic` to your pom (or gradle) dependencies.
 
 Add a `application.properties` file, under the `src/main/resources` directory, to enable and configure the Anthropic chat model:
 

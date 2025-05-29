@@ -46,7 +46,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @EnabledIfEnvironmentVariable(named = "OPENAI_API_KEY", matches = ".+")
 public class OpenAiApiIT {
 
-	OpenAiApi openAiApi = new OpenAiApi(System.getenv("OPENAI_API_KEY"));
+	OpenAiApi openAiApi = OpenAiApi.builder().apiKey(System.getenv("OPENAI_API_KEY")).build();
 
 	@Test
 	void chatCompletionEntity() {
@@ -75,7 +75,7 @@ public class OpenAiApiIT {
 				"If a train travels 100 miles in 2 hours, what is its average speed?", ChatCompletionMessage.Role.USER);
 		ChatCompletionRequest request = new ChatCompletionRequest(List.of(userMessage), "o1", null, null, null, null,
 				null, null, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null,
-				null, null, null, "low");
+				null, null, null, "low", null);
 		ResponseEntity<ChatCompletion> response = this.openAiApi.chatCompletionEntity(request);
 
 		assertThat(response).isNotNull();

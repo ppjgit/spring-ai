@@ -1,5 +1,5 @@
 /*
- * Copyright 2023-2024 the original author or authors.
+ * Copyright 2023-2025 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,9 @@
 package org.springframework.ai.openai.api;
 
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -36,7 +36,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.Assert;
-import org.springframework.util.CollectionUtils;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.ResponseErrorHandler;
@@ -49,6 +48,7 @@ import org.springframework.web.reactive.function.client.WebClient;
  *
  * @author Christian Tzolov
  * @author Ilayaperumal Gopinathan
+ * @author Jonghoon Park
  * @since 0.8.1
  */
 public class OpenAiAudioApi {
@@ -56,79 +56,6 @@ public class OpenAiAudioApi {
 	private final RestClient restClient;
 
 	private final WebClient webClient;
-
-	/**
-	 * Create a new audio api.
-	 * @param openAiToken OpenAI apiKey.
-	 * @deprecated use {@link Builder} instead.
-	 */
-	@Deprecated(forRemoval = true, since = "1.0.0-M6")
-	public OpenAiAudioApi(String openAiToken) {
-		this(OpenAiApiConstants.DEFAULT_BASE_URL, openAiToken, RestClient.builder(), WebClient.builder(),
-				RetryUtils.DEFAULT_RESPONSE_ERROR_HANDLER);
-	}
-
-	/**
-	 * Create a new audio api.
-	 * @param baseUrl api base URL.
-	 * @param openAiToken OpenAI apiKey.
-	 * @param restClientBuilder RestClient builder.
-	 * @param responseErrorHandler Response error handler.
-	 * @deprecated use {@link Builder} instead.
-	 */
-	@Deprecated(forRemoval = true, since = "1.0.0-M6")
-	public OpenAiAudioApi(String baseUrl, String openAiToken, RestClient.Builder restClientBuilder,
-			ResponseErrorHandler responseErrorHandler) {
-		Consumer<HttpHeaders> authHeaders;
-		if (openAiToken != null && !openAiToken.isEmpty()) {
-			authHeaders = h -> h.setBearerAuth(openAiToken);
-		}
-		else {
-			authHeaders = h -> {
-			};
-		}
-
-		this.restClient = restClientBuilder.baseUrl(baseUrl)
-			.defaultHeaders(authHeaders)
-			.defaultStatusHandler(responseErrorHandler)
-			.build();
-
-		this.webClient = WebClient.builder().baseUrl(baseUrl).defaultHeaders(authHeaders).build();
-	}
-
-	/**
-	 * Create a new audio api.
-	 * @param baseUrl api base URL.
-	 * @param apiKey OpenAI apiKey.
-	 * @param restClientBuilder RestClient builder.
-	 * @param webClientBuilder WebClient builder.
-	 * @param responseErrorHandler Response error handler.
-	 * @deprecated use {@link Builder} instead.
-	 */
-	@Deprecated(forRemoval = true, since = "1.0.0-M6")
-	public OpenAiAudioApi(String baseUrl, String apiKey, RestClient.Builder restClientBuilder,
-			WebClient.Builder webClientBuilder, ResponseErrorHandler responseErrorHandler) {
-
-		this(baseUrl, apiKey, CollectionUtils.toMultiValueMap(Map.of()), restClientBuilder, webClientBuilder,
-				responseErrorHandler);
-	}
-
-	/**
-	 * Create a new audio api.
-	 * @param baseUrl api base URL.
-	 * @param apiKey OpenAI apiKey.
-	 * @param headers the http headers to use.
-	 * @param restClientBuilder RestClient builder.
-	 * @param webClientBuilder WebClient builder.
-	 * @param responseErrorHandler Response error handler.
-	 * @deprecated use {@link Builder} instead.
-	 */
-	@Deprecated(forRemoval = true, since = "1.0.0-M6")
-	public OpenAiAudioApi(String baseUrl, String apiKey, MultiValueMap<String, String> headers,
-			RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder,
-			ResponseErrorHandler responseErrorHandler) {
-		this(baseUrl, new SimpleApiKey(apiKey), headers, restClientBuilder, webClientBuilder, responseErrorHandler);
-	}
 
 	/**
 	 * Create a new audio api.
@@ -151,12 +78,13 @@ public class OpenAiAudioApi {
 			// h.setContentType(MediaType.APPLICATION_JSON);
 		};
 
-		this.restClient = restClientBuilder.baseUrl(baseUrl)
+		this.restClient = restClientBuilder.clone()
+			.baseUrl(baseUrl)
 			.defaultHeaders(authHeaders)
 			.defaultStatusHandler(responseErrorHandler)
 			.build();
 
-		this.webClient = webClientBuilder.baseUrl(baseUrl).defaultHeaders(authHeaders).build();
+		this.webClient = webClientBuilder.clone().baseUrl(baseUrl).defaultHeaders(authHeaders).build();
 	}
 
 	public static Builder builder() {
@@ -405,7 +333,7 @@ public class OpenAiAudioApi {
 	// @formatter:off
 		@JsonProperty("model") String model,
 		@JsonProperty("input") String input,
-		@JsonProperty("voice") Voice voice,
+		@JsonProperty("voice") String voice,
 		@JsonProperty("response_format") AudioResponseFormat responseFormat,
 		@JsonProperty("speed") Float speed) {
 		// @formatter:on
@@ -453,8 +381,8 @@ public class OpenAiAudioApi {
 		}
 
 		/**
-		 * The format to audio in. Supported formats are mp3, opus, aac, and flac.
-		 * Defaults to mp3.
+		 * The format to audio in. Supported formats are mp3, opus, aac, wav, pcm and
+		 * flac. Defaults to mp3.
 		 */
 		public enum AudioResponseFormat {
 
@@ -466,7 +394,11 @@ public class OpenAiAudioApi {
 			@JsonProperty("aac")
 			AAC("aac"),
 			@JsonProperty("flac")
-			FLAC("flac");
+			FLAC("flac"),
+			@JsonProperty("wav")
+			WAV("wav"),
+			@JsonProperty("pcm")
+			PCM("pcm");
 			// @formatter:on
 
 			public final String value;
@@ -490,32 +422,14 @@ public class OpenAiAudioApi {
 
 			private String input;
 
-			private Voice voice;
+			private String voice;
 
 			private AudioResponseFormat responseFormat = AudioResponseFormat.MP3;
 
 			private Float speed;
 
-			/**
-			 * @deprecated use {@link #model(String)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withModel(String model) {
-				this.model = model;
-				return this;
-			}
-
 			public Builder model(String model) {
 				this.model = model;
-				return this;
-			}
-
-			/**
-			 * @deprecated use {@link #input(String)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withInput(String input) {
-				this.input = input;
 				return this;
 			}
 
@@ -524,40 +438,18 @@ public class OpenAiAudioApi {
 				return this;
 			}
 
-			/**
-			 * @deprecated use {@link #voice(Voice)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withVoice(Voice voice) {
+			public Builder voice(String voice) {
 				this.voice = voice;
 				return this;
 			}
 
 			public Builder voice(Voice voice) {
-				this.voice = voice;
-				return this;
-			}
-
-			/**
-			 * @deprecated use {@link #responseFormat(AudioResponseFormat)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withResponseFormat(AudioResponseFormat responseFormat) {
-				this.responseFormat = responseFormat;
+				this.voice = voice.getValue();
 				return this;
 			}
 
 			public Builder responseFormat(AudioResponseFormat responseFormat) {
 				this.responseFormat = responseFormat;
-				return this;
-			}
-
-			/**
-			 * @deprecated use {@link #speed(Float)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withSpeed(Float speed) {
-				this.speed = speed;
 				return this;
 			}
 
@@ -653,26 +545,8 @@ public class OpenAiAudioApi {
 
 			private GranularityType granularityType;
 
-			/**
-			 * @deprecated use {@link #file(byte[])} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withFile(byte[] file) {
-				this.file = file;
-				return this;
-			}
-
 			public Builder file(byte[] file) {
 				this.file = file;
-				return this;
-			}
-
-			/**
-			 * @deprecated use {@link #model(String)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withModel(String model) {
-				this.model = model;
 				return this;
 			}
 
@@ -681,26 +555,8 @@ public class OpenAiAudioApi {
 				return this;
 			}
 
-			/**
-			 * @deprecated use {@link #language(String)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withLanguage(String language) {
-				this.language = language;
-				return this;
-			}
-
 			public Builder language(String language) {
 				this.language = language;
-				return this;
-			}
-
-			/**
-			 * @deprecated use {@link #prompt(String)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withPrompt(String prompt) {
-				this.prompt = prompt;
 				return this;
 			}
 
@@ -709,40 +565,13 @@ public class OpenAiAudioApi {
 				return this;
 			}
 
-			/**
-			 * @deprecated use {@link #responseFormat(TranscriptResponseFormat)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withResponseFormat(TranscriptResponseFormat response_format) {
-				this.responseFormat = response_format;
-				return this;
-			}
-
 			public Builder responseFormat(TranscriptResponseFormat responseFormat) {
 				this.responseFormat = responseFormat;
 				return this;
 			}
 
-			/**
-			 * @deprecated use {@link #temperature(Float)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withTemperature(Float temperature) {
-				this.temperature = temperature;
-				return this;
-			}
-
 			public Builder temperature(Float temperature) {
 				this.temperature = temperature;
-				return this;
-			}
-
-			/**
-			 * @deprecated use {@link #granularityType(GranularityType)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withGranularityType(GranularityType granularityType) {
-				this.granularityType = granularityType;
 				return this;
 			}
 
@@ -805,26 +634,8 @@ public class OpenAiAudioApi {
 
 			private Float temperature;
 
-			/**
-			 * @deprecated use {@link #file(byte[])} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withFile(byte[] file) {
-				this.file = file;
-				return this;
-			}
-
 			public Builder file(byte[] file) {
 				this.file = file;
-				return this;
-			}
-
-			/**
-			 * @deprecated use {@link #model(String)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withModel(String model) {
-				this.model = model;
 				return this;
 			}
 
@@ -833,40 +644,13 @@ public class OpenAiAudioApi {
 				return this;
 			}
 
-			/**
-			 * @deprecated use {@link #prompt(String)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withPrompt(String prompt) {
-				this.prompt = prompt;
-				return this;
-			}
-
 			public Builder prompt(String prompt) {
 				this.prompt = prompt;
 				return this;
 			}
 
-			/**
-			 * @deprecated use {@link #responseFormat(TranscriptResponseFormat)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withResponseFormat(TranscriptResponseFormat responseFormat) {
-				this.responseFormat = responseFormat;
-				return this;
-			}
-
 			public Builder responseFormat(TranscriptResponseFormat responseFormat) {
 				this.responseFormat = responseFormat;
-				return this;
-			}
-
-			/**
-			 * @deprecated use {@link #temperature(Float)} instead.
-			 */
-			@Deprecated(forRemoval = true, since = "1.0.0-M6")
-			public Builder withTemperature(Float temperature) {
-				this.temperature = temperature;
 				return this;
 			}
 
@@ -902,6 +686,7 @@ public class OpenAiAudioApi {
 	 * details.
 	 */
 	@JsonInclude(Include.NON_NULL)
+	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record StructuredResponse(
 	// @formatter:off
 		@JsonProperty("language") String language,
@@ -919,6 +704,7 @@ public class OpenAiAudioApi {
 		 * @param end The end time of the word in seconds.
 		 */
 		@JsonInclude(Include.NON_NULL)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record Word(
 		// @formatter:off
 			@JsonProperty("word") String word,
@@ -945,6 +731,7 @@ public class OpenAiAudioApi {
 		 * higher than 1.0 and the avg_logprob is below -1, consider this segment silent.
 		 */
 		@JsonInclude(Include.NON_NULL)
+		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record Segment(
 		// @formatter:off
 			@JsonProperty("id") Integer id,
